@@ -23,12 +23,13 @@ fn ui_system(
         Option<&mut BloomSettings>,
         Option<&mut Tonemapping>,
         Option<&mut Fxaa>,
+        Option<&mut Projection>,
     )>,
 ) {
     egui::Window::new("Settings")
         .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
         .show(egui_context.ctx_mut(), |ui| {
-            for (i, (mut trace_settings, bloom_settings, tonemapping, fxaa)) in
+            for (i, (mut trace_settings, bloom_settings, tonemapping, fxaa, projection)) in
                 camera_settings_query.iter_mut().enumerate()
             {
                 ui.collapsing(format!("Camera Settings {}", i), |ui| {
@@ -62,6 +63,23 @@ fn ui_system(
                     }
                     if let Some(fxaa) = fxaa {
                         ui.checkbox(&mut fxaa.into_inner().enabled, "FXAA");
+                    }
+                    if let Some(projection) = projection {
+                        match projection.into_inner() {
+                            Projection::Orthographic(orthographic_projection) => {
+                                ui.add(
+                                    Slider::new(&mut orthographic_projection.scale, 0.0..=1000.0)
+                                        .text("Orthographic scale"),
+                                );
+                            }
+                            Projection::Perspective(perspective_projection) => {
+                                ui.add(
+                                    Slider::new(&mut perspective_projection.fov, 0.0..=3.1415)
+                                        .logarithmic(true)
+                                        .text("Perspective fov"),
+                                );
+                            }
+                        }
                     }
                 });
             }
