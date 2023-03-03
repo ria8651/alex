@@ -32,7 +32,7 @@ fn ui_system(
             for (i, (mut trace_settings, bloom_settings, tonemapping, fxaa, projection)) in
                 camera_settings_query.iter_mut().enumerate()
             {
-                ui.collapsing(format!("Camera Settings {}", i), |ui| {
+                egui::CollapsingHeader::new(format!("Camera Settings {}", i)).default_open(true).show(ui, |ui| {
                     ui.checkbox(&mut trace_settings.show_ray_steps, "Show ray steps");
                     ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
                     ui.checkbox(&mut trace_settings.shadows, "Shadows");

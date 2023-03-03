@@ -1,3 +1,4 @@
+use super::voxel_world::VoxelData;
 use bevy::{
     core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
     ecs::query::QueryItem,
@@ -118,26 +119,24 @@ fn prepare_uniforms(
 
 impl FromWorld for MainPassPipelineData {
     fn from_world(render_world: &mut World) -> Self {
-        // let voxel_data = render_world.get_resource::<VoxelData>().unwrap();
+        let voxel_data = render_world.get_resource::<VoxelData>().unwrap();
         let asset_server = render_world.get_resource::<AssetServer>().unwrap();
 
-        // let voxel_bind_group_layout = voxel_data.bind_group_layout.clone();
+        let voxel_bind_group_layout = voxel_data.bind_group_layout.clone();
         let bind_group_layout = render_world
             .resource::<RenderDevice>()
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("trace bind group layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: BufferSize::new(TraceUniforms::SHADER_SIZE.into()),
-                        },
-                        count: None,
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: BufferSize::new(TraceUniforms::SHADER_SIZE.into()),
                     },
-                ],
+                    count: None,
+                }],
             });
 
         let trace_shader = asset_server.load("shader.wgsl");
@@ -145,7 +144,7 @@ impl FromWorld for MainPassPipelineData {
         let trace_pipeline_descriptor = RenderPipelineDescriptor {
             label: Some("trace pipeline".into()),
             layout: Some(vec![
-                // voxel_bind_group_layout.clone(),
+                voxel_bind_group_layout.clone(),
                 bind_group_layout.clone(),
             ]),
             vertex: fullscreen_shader_vertex_state(),

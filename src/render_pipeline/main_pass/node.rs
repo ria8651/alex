@@ -1,5 +1,5 @@
 use super::{MainPassPipelineData, ViewMainPassUniformBuffer};
-use crate::render_pipeline::RenderGraphSettings;
+use crate::render_pipeline::{voxel_world::VoxelData, RenderGraphSettings};
 use bevy::{
     prelude::*,
     render::{
@@ -10,7 +10,8 @@ use bevy::{
 };
 
 pub struct MainPassNode {
-    query: QueryState<(&'static ViewTarget, &'static ViewMainPassUniformBuffer), With<ExtractedView>>,
+    query:
+        QueryState<(&'static ViewTarget, &'static ViewMainPassUniformBuffer), With<ExtractedView>>,
 }
 
 impl MainPassNode {
@@ -38,7 +39,7 @@ impl render_graph::Node for MainPassNode {
     ) -> Result<(), render_graph::NodeRunError> {
         let view_entity = graph.get_input_entity("view")?;
         let pipeline_cache = world.resource::<PipelineCache>();
-        // let voxel_data = world.get_resource::<VoxelData>().unwrap();
+        let voxel_data = world.get_resource::<VoxelData>().unwrap();
         let pipeline_data = world.get_resource::<MainPassPipelineData>().unwrap();
         let render_graph_settings = world.get_resource::<RenderGraphSettings>().unwrap();
 
@@ -56,19 +57,16 @@ impl render_graph::Node for MainPassNode {
             None => return Ok(()),
         };
 
-        let bind_group =
-            render_context
-                .render_device
-                .create_bind_group(&BindGroupDescriptor {
-                    label: Some("main pass bind group"),
-                    layout: &pipeline_data.bind_group_layout,
-                    entries: &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: uniform_buffer.binding().unwrap(),
-                        },
-                    ],
-                });
+        let bind_group = render_context
+            .render_device
+            .create_bind_group(&BindGroupDescriptor {
+                label: Some("main pass bind group"),
+                layout: &pipeline_data.bind_group_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.binding().unwrap(),
+                }],
+            });
 
         let render_pass_descriptor = RenderPassDescriptor {
             label: Some("main pass"),
@@ -87,8 +85,8 @@ impl render_graph::Node for MainPassNode {
             .command_encoder
             .begin_render_pass(&render_pass_descriptor);
 
-        // render_pass.set_bind_group(0, &voxel_data.bind_group, &[]);
-        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.set_bind_group(0, &voxel_data.bind_group, &[]);
+        render_pass.set_bind_group(1, &bind_group, &[]);
 
         render_pass.set_pipeline(trace_pipeline);
         render_pass.draw(0..3, 0..1);

@@ -11,7 +11,12 @@ struct MainPassUniforms {
     misc_float: f32,
 };
 
-@group(0) @binding(0)
+@group(0) @binding(1)
+var bricks: texture_storage_3d<rgba8unorm, read_write>;
+@group(0) @binding(2)
+var<storage, read_write> brickmap: array<u32>;
+
+@group(1) @binding(0)
 var<uniform> uniforms: MainPassUniforms;
 
 struct Ray {
@@ -47,9 +52,10 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let dir = normalize(dir.xyz / dir.w - pos);
     var ray = Ray(pos, dir);
 
-    output_colour = vec3(ray_box_dist(ray, vec3(-0.5), vec3(0.5)).x);
-    // output_colour = ray.dir;
+    let p = vec2<i32>(in.uv * 16.0);
+    let pos = vec3(p, i32(uniforms.misc_float * 16.0));
+    output_colour = textureLoad(bricks, vec3<i32>(pos)).xyz;
 
-    // output_colour = max(output_colour, vec3(0.0));
+    output_colour = max(output_colour, vec3(0.0));
     return vec4<f32>(output_colour, 1.0);
 }

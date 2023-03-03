@@ -1,4 +1,7 @@
-use self::main_pass::{MainPassNode, MainPassPlugin};
+use self::{
+    main_pass::{MainPassNode, MainPassPlugin},
+    voxel_world::VoxelWorldPlugin,
+};
 use bevy::{
     core_pipeline::{
         bloom::BloomNode, fxaa::FxaaNode, tonemapping::TonemappingNode, upscaling::UpscalingNode,
@@ -14,6 +17,7 @@ use bevy::{
 pub use main_pass::MainPassSettings;
 
 mod main_pass;
+mod voxel_world;
 
 pub struct RenderPlugin;
 
@@ -21,6 +25,7 @@ impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(RenderGraphSettings::default())
             .add_plugin(ExtractResourcePlugin::<RenderGraphSettings>::default())
+            .add_plugin(VoxelWorldPlugin)
             .add_plugin(MainPassPlugin);
 
         let render_app = match app.get_sub_app_mut(RenderApp) {
