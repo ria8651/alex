@@ -42,7 +42,7 @@ impl Plugin for VoxelWorldPlugin {
         for x in 0..16 {
             for y in 0..16 {
                 for z in 0..16 {
-                    texture_data[4 * (x * 256 + (15 - y) * 16 + z)] = match block_states.at(x, y, z) {
+                    texture_data[4 * (x * 256 + y * 16 + z)] = match block_states.at(x, y, z) {
                         Some(block) => match block.name() {
                             "minecraft:stone" => 255,
                             "minecraft:air" => 0,

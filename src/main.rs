@@ -31,6 +31,8 @@ fn setup(mut commands: Commands) {
             },
             projection: Projection::Perspective(PerspectiveProjection {
                 fov: 1.57,
+                near: 0.001,
+                far: 100.0,
                 ..default()
             }),
             ..default()

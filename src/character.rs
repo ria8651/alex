@@ -1,6 +1,6 @@
 use bevy::{input::mouse::MouseMotion, prelude::*, window::CursorGrabMode};
 
-const SPEED: f32 = 10.0;
+const SPEED: f32 = 2.0;
 const SENSITIVITY: f32 = 0.004;
 
 #[derive(Component)]
