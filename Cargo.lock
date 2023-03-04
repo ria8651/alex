@@ -63,6 +63,7 @@ dependencies = [
  "bevy_egui",
  "fastanvil",
  "fastnbt",
+ "serde_json",
 ]
 
 [[package]]

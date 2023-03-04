@@ -61,11 +61,11 @@ struct Voxel {
 };
 
 fn get_value(pos: vec3<f32>) -> Voxel {
-    let pos = vec3<i32>(16.0 * (pos * 0.5 + 0.5));
+    let pos = vec3<i32>(256.0 * (pos * 0.5 + 0.5));
     let data = textureLoad(bricks, pos);
-    let return_pos = (vec3<f32>(pos) + 0.5) / 16.0 * 2.0 - 1.0;
+    let return_pos = (vec3<f32>(pos) + 0.5) / 256.0 * 2.0 - 1.0;
 
-    return Voxel(data, return_pos, 16u);
+    return Voxel(data, return_pos, 256u);
 }
 
 fn shoot_ray(r: Ray) -> HitInfo {
@@ -110,31 +110,25 @@ fn shoot_ray(r: Ray) -> HitInfo {
         steps = steps + 1u;
     }
 
-    return HitInfo(true, voxel.data, tcpotr, normal, steps);
+    return HitInfo(true, voxel.data, tcpotr + normal * 0.000003, normal, steps);
 }
 
 let light_dir = vec3<f32>(0.8, -1.0, 0.8);
 let light_colour = vec3<f32>(1.0, 1.0, 1.0);
 
 fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
-    var lighting = vec3(0.0);
-    if (material.a == 0.0) {
-        // diffuse
-        let diffuse = max(dot(normal, -normalize(light_dir)), 0.0);
+    // diffuse
+    let diffuse = max(dot(normal, -normalize(light_dir)), 0.0);
 
-        // shadow
-        var shadow = 1.0;
-        if (uniforms.shadows != 0u) {
-            let shadow_ray = Ray(pos + normal * 0.0002, -light_dir);
-            let shadow_hit = shoot_ray(shadow_ray);
-            shadow = f32(!shadow_hit.hit);
-        }
-
-        lighting = diffuse * shadow * light_colour;
-    } else {
-        lighting = vec3(material.rgb);
+    // shadow
+    var shadow = 1.0;
+    if (uniforms.shadows != 0u) {
+        let shadow_ray = Ray(pos, -light_dir);
+        let shadow_hit = shoot_ray(shadow_ray);
+        shadow = f32(!shadow_hit.hit);
     }
-    return lighting;
+
+    return diffuse * shadow * light_colour;
 }
 
 fn check_voxel(pos: vec3<f32>) -> f32 {
@@ -172,8 +166,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let dir = normalize(dir.xyz / dir.w - pos);
     var ray = Ray(pos, dir);
 
-    // let p = vec2<i32>(in.uv * 16.0);
-    // let pos = vec3(p, i32(uniforms.misc_float * 16.0));
+    // let p = vec2<i32>(in.uv * 256.0);
+    // let pos = vec3(p, i32(uniforms.misc_float * 256.0));
     // output_colour = textureLoad(bricks, vec3<i32>(pos)).xyz;
 
     // output_colour = vec3(ray_box_dist(Ray(pos, dir), vec3(-1.0), vec3(1.0)).x);
@@ -184,7 +178,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let direct_lighting = calculate_direct(hit.data, hit.pos, hit.normal);
 
         // aproximate indirect with ambient and voxel ao
-        let texture_coords = (hit.pos * 0.5 + 0.5) * 16.0;
+        let texture_coords = (hit.pos * 0.5 + 0.5) * 256.0;
         let ao = voxel_ao(texture_coords, hit.normal.zxy, hit.normal.yzx);
         let uv = glmod(vec2(dot(hit.normal * texture_coords.yzx, vec3(1.0)), dot(hit.normal * texture_coords.zxy, vec3(1.0))), vec2(1.0));
 
@@ -194,9 +188,13 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let indirect_lighting = vec3(interpolated_ao * 0.3);
 
         // final blend
-        output_colour = (indirect_lighting + direct_lighting) * hit.data.rgb;
+        output_colour = (indirect_lighting + direct_lighting) * pow(hit.data.rgb, vec3(2.2));
     } else {
-        output_colour = vec3(0.4);
+        if (uniforms.show_ray_steps != 0u) {
+            output_colour = vec3(f32(hit.steps) / 100.0);
+        } else {
+            output_colour = vec3(0.4);
+        }
     }
 
     output_colour = max(output_colour, vec3(0.0));
