@@ -3,7 +3,7 @@ use bevy::{
     render::{
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
-        RenderApp, RenderStage,
+        RenderApp, RenderSet,
     },
     utils::HashMap,
 };
@@ -30,7 +30,7 @@ impl Plugin for VoxelWorldPlugin {
         let mut texture_data = vec![0; 256 * 256 * 256 * 4];
 
         // load mc palette
-        let file = std::fs::File::open("palette/blockstates.json");
+        let file = std::fs::File::open("assets/palette/blockstates.json");
         let mut json: HashMap<String, [u8; 4]> = serde_json::from_reader(file.unwrap()).unwrap();
         json.insert("minecraft:grass".to_string(), [62, 204, 18, 255]);
         json.insert("minecraft:grass_block".to_string(), [62, 204, 18, 255]);
@@ -47,7 +47,7 @@ impl Plugin for VoxelWorldPlugin {
         use fastanvil::{CurrentJavaChunk, Region};
         use fastnbt::from_bytes;
 
-        let file = std::fs::File::open("/Users/brian/Documents/MultiMC/Fabric 1.19.3/.minecraft/saves/anvil test world/region/r.0.0.mca").unwrap();
+        let file = std::fs::File::open("assets/r.0.0.mca").unwrap();
         let mut region = Region::from_stream(file).unwrap();
 
         for chunk_x in 0..16 {
@@ -79,7 +79,7 @@ impl Plugin for VoxelWorldPlugin {
                                 let colour = json.get(block_name).unwrap_or(&[255, 0, 0, 0]);
 
                                 match json.get(block_name) {
-                                    Some(_) => {},
+                                    Some(_) => {}
                                     None => {
                                         println!("{} not found", block_name);
                                     }
@@ -102,6 +102,7 @@ impl Plugin for VoxelWorldPlugin {
             render_queue,
             &TextureDescriptor {
                 label: None,
+                view_formats: &[TextureFormat::Rgba8Unorm],
                 size: Extent3d {
                     width: 256,
                     height: 256,
@@ -187,7 +188,7 @@ impl Plugin for VoxelWorldPlugin {
                 bind_group_layout,
                 bind_group,
             })
-            .add_system_to_stage(RenderStage::Queue, queue_bind_group);
+            .add_system(queue_bind_group.in_set(RenderSet::Queue));
     }
 }
 

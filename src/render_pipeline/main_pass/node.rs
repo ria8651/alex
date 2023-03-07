@@ -58,7 +58,7 @@ impl render_graph::Node for MainPassNode {
         };
 
         let bind_group = render_context
-            .render_device
+            .render_device()
             .create_bind_group(&BindGroupDescriptor {
                 label: Some("main pass bind group"),
                 layout: &pipeline_data.bind_group_layout,
@@ -82,7 +82,7 @@ impl render_graph::Node for MainPassNode {
         };
 
         let mut render_pass = render_context
-            .command_encoder
+            .command_encoder()
             .begin_render_pass(&render_pass_descriptor);
 
         render_pass.set_bind_group(0, &voxel_data.bind_group, &[]);

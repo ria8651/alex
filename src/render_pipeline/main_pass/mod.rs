@@ -1,14 +1,13 @@
 use super::voxel_world::VoxelData;
 use bevy::{
     core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
-    ecs::query::QueryItem,
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
         view::{ExtractedView, ViewTarget},
-        RenderApp, RenderStage,
+        RenderApp, RenderSet,
     },
 };
 pub use node::MainPassNode;
@@ -24,7 +23,7 @@ impl Plugin for MainPassPlugin {
         // setup custom render pipeline
         app.sub_app_mut(RenderApp)
             .init_resource::<MainPassPipelineData>()
-            .add_system_to_stage(RenderStage::Prepare, prepare_uniforms);
+            .add_system(prepare_uniforms.in_set(RenderSet::Prepare));
     }
 }
 
@@ -34,22 +33,13 @@ struct MainPassPipelineData {
     bind_group_layout: BindGroupLayout,
 }
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, ExtractComponent)]
 pub struct MainPassSettings {
     pub show_ray_steps: bool,
     pub indirect_lighting: bool,
     pub shadows: bool,
     pub misc_bool: bool,
     pub misc_float: f32,
-}
-
-impl ExtractComponent for MainPassSettings {
-    type Query = &'static MainPassSettings;
-    type Filter = ();
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Self {
-        item.clone()
-    }
 }
 
 impl Default for MainPassSettings {
@@ -143,10 +133,7 @@ impl FromWorld for MainPassPipelineData {
 
         let trace_pipeline_descriptor = RenderPipelineDescriptor {
             label: Some("trace pipeline".into()),
-            layout: Some(vec![
-                voxel_bind_group_layout.clone(),
-                bind_group_layout.clone(),
-            ]),
+            layout: vec![voxel_bind_group_layout.clone(), bind_group_layout.clone()],
             vertex: fullscreen_shader_vertex_state(),
             fragment: Some(FragmentState {
                 shader: trace_shader,
@@ -161,9 +148,10 @@ impl FromWorld for MainPassPipelineData {
             primitive: PrimitiveState::default(),
             depth_stencil: None,
             multisample: MultisampleState::default(),
+            push_constant_ranges: Vec::new(),
         };
 
-        let mut cache = render_world.resource_mut::<PipelineCache>();
+        let cache = render_world.resource::<PipelineCache>();
         let pipeline_id = cache.queue_render_pipeline(trace_pipeline_descriptor);
 
         MainPassPipelineData {

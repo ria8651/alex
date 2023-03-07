@@ -42,8 +42,7 @@ fn ray_box_dist(r: Ray, vmin: vec3<f32>, vmax: vec3<f32>) -> vec2<f32> {
 }
 
 fn in_bounds(v: vec3<f32>) -> bool {
-    let s = step(vec3<f32>(-1.0), v) - step(vec3<f32>(1.0), v);
-    return (s.x * s.y * s.z) > 0.5;
+    return max(max(abs(v.x), abs(v.y)), abs(v.z)) < 1.0;
 }
 
 struct HitInfo {
@@ -113,8 +112,8 @@ fn shoot_ray(r: Ray) -> HitInfo {
     return HitInfo(true, voxel.data, tcpotr + normal * 0.000003, normal, steps);
 }
 
-let light_dir = vec3<f32>(0.8, -1.0, 0.8);
-let light_colour = vec3<f32>(1.0, 1.0, 1.0);
+const light_dir = vec3<f32>(0.8, -1.0, 0.8);
+const light_colour = vec3<f32>(1.0, 1.0, 1.0);
 
 fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
     // diffuse
@@ -160,10 +159,10 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let clip_space = vec2(1.0, -1.0) * (in.uv * 2.0 - 1.0);
     var output_colour = vec3(0.0);
 
-    let pos = uniforms.camera_inverse * vec4(clip_space.x, clip_space.y, 1.0, 1.0);
-    let dir = uniforms.camera_inverse * vec4(clip_space.x, clip_space.y, 0.01, 1.0);
-    let pos = pos.xyz / pos.w;
-    let dir = normalize(dir.xyz / dir.w - pos);
+    let pos4 = uniforms.camera_inverse * vec4(clip_space.x, clip_space.y, 1.0, 1.0);
+    let dir4 = uniforms.camera_inverse * vec4(clip_space.x, clip_space.y, 0.01, 1.0);
+    let pos = pos4.xyz / pos4.w;
+    let dir = normalize(dir4.xyz / dir4.w - pos);
     var ray = Ray(pos, dir);
 
     // let p = vec2<i32>(in.uv * 256.0);
@@ -182,8 +181,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let ao = voxel_ao(texture_coords, hit.normal.zxy, hit.normal.yzx);
         let uv = glmod(vec2(dot(hit.normal * texture_coords.yzx, vec3(1.0)), dot(hit.normal * texture_coords.zxy, vec3(1.0))), vec2(1.0));
 
-        let interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
-        let interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
+        var interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
+        interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
 
         let indirect_lighting = vec3(interpolated_ao * 0.3);
 

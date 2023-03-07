@@ -52,29 +52,17 @@ impl Plugin for RenderPlugin {
         voxel_graph.add_node("fxaa", fxaa);
         voxel_graph.add_node("ui", ui);
         voxel_graph.add_node("upscaling", upscaling);
-        voxel_graph
-            .add_slot_edge(input_node_id, "view_entity", "main_pass", "view")
-            .unwrap();
-        voxel_graph
-            .add_slot_edge(input_node_id, "view_entity", "bloom", "view")
-            .unwrap();
-        voxel_graph
-            .add_slot_edge(input_node_id, "view_entity", "tonemapping", "view")
-            .unwrap();
-        voxel_graph
-            .add_slot_edge(input_node_id, "view_entity", "fxaa", "view")
-            .unwrap();
-        voxel_graph
-            .add_slot_edge(input_node_id, "view_entity", "ui", "view")
-            .unwrap();
-        voxel_graph
-            .add_slot_edge(input_node_id, "view_entity", "upscaling", "view")
-            .unwrap();
-        voxel_graph.add_node_edge("main_pass", "bloom").unwrap();
-        voxel_graph.add_node_edge("bloom", "tonemapping").unwrap();
-        voxel_graph.add_node_edge("tonemapping", "fxaa").unwrap();
-        voxel_graph.add_node_edge("fxaa", "ui").unwrap();
-        voxel_graph.add_node_edge("ui", "upscaling").unwrap();
+        voxel_graph.add_slot_edge(input_node_id, "view_entity", "main_pass", "view");
+        voxel_graph.add_slot_edge(input_node_id, "view_entity", "bloom", "view");
+        voxel_graph.add_slot_edge(input_node_id, "view_entity", "tonemapping", "view");
+        voxel_graph.add_slot_edge(input_node_id, "view_entity", "fxaa", "view");
+        voxel_graph.add_slot_edge(input_node_id, "view_entity", "ui", "view");
+        voxel_graph.add_slot_edge(input_node_id, "view_entity", "upscaling", "view");
+        voxel_graph.add_node_edge("main_pass", "bloom");
+        voxel_graph.add_node_edge("bloom", "tonemapping");
+        voxel_graph.add_node_edge("tonemapping", "fxaa");
+        voxel_graph.add_node_edge("fxaa", "ui");
+        voxel_graph.add_node_edge("ui", "upscaling");
 
         // insert the voxel graph into the main render graph
         let mut graph = render_app.world.resource_mut::<RenderGraph>();

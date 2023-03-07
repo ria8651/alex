@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = "0.9.1"
-bevy_egui = "0.19.0"
+bevy = "0.10"
+bevy_egui = { git = "https://github.com/mvlabat/bevy_egui", branch = "bevy-0.10" }
 fastanvil = "0.26.1"
 fastnbt = "2.4.2"
 serde_json = "1.0.93"
