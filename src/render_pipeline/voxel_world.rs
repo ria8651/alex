@@ -32,13 +32,13 @@ impl Plugin for VoxelWorldPlugin {
         // load mc palette
         let file = std::fs::File::open("assets/palette/blockstates.json");
         let mut json: HashMap<String, [u8; 4]> = serde_json::from_reader(file.unwrap()).unwrap();
-        json.insert("minecraft:grass".to_string(), [62, 204, 18, 255]);
+        json.insert("minecraft:grass".to_string(), [0, 0, 0, 0]);
+        json.insert("minecraft:tall_grass".to_string(), [0, 0, 0, 0]);
         json.insert("minecraft:grass_block".to_string(), [62, 204, 18, 255]);
         json.insert("minecraft:water".to_string(), [20, 105, 201, 255]);
         json.insert("minecraft:cave_air".to_string(), [0, 0, 0, 0]);
         json.insert("minecraft:lava".to_string(), [255, 123, 0, 0]);
         json.insert("minecraft:seagrass".to_string(), [62, 204, 18, 0]);
-        json.insert("minecraft:tall_grass".to_string(), [0, 255, 0, 0]);
         json.insert("minecraft:deepslate".to_string(), [77, 77, 77, 0]);
         json.insert("minecraft:oak_log".to_string(), [112, 62, 8, 0]);
         json.insert("minecraft:oak_stairs".to_string(), [112, 62, 8, 0]);
@@ -81,7 +81,7 @@ impl Plugin for VoxelWorldPlugin {
                                 match json.get(block_name) {
                                     Some(_) => {}
                                     None => {
-                                        println!("{} not found", block_name);
+                                        // println!("{} not found", block_name);
                                     }
                                 }
 
@@ -118,9 +118,23 @@ impl Plugin for VoxelWorldPlugin {
         );
         let bricks = bricks.create_view(&TextureViewDescriptor::default());
 
+        let mut octree = vec![0; 8];
+        let mut subdivide = |index: usize| {
+            octree[index] = octree.len() as u32;
+            octree.extend(&[0; 8]);
+        };
+        for i in 2..10 {
+            subdivide(i);
+        }
+        for i in 0..octree.len() {
+            octree[i] = octree[i] | ((i as u32) << 16);
+        }
+        let data = &octree.as_slice() as *const &[u32] as *const &[u8];
+        let data: &[u8] = unsafe { &*data };
+
         // storage
         let brickmap = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            contents: &vec![0; 10],
+            contents: data,
             label: None,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
@@ -142,20 +156,20 @@ impl Plugin for VoxelWorldPlugin {
                     BindGroupLayoutEntry {
                         binding: 1,
                         visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
-                        ty: BindingType::StorageTexture {
-                            access: StorageTextureAccess::ReadWrite,
-                            format: TextureFormat::Rgba8Unorm,
-                            view_dimension: TextureViewDimension::D3,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: BufferSize::new(4),
                         },
                         count: None,
                     },
                     BindGroupLayoutEntry {
                         binding: 2,
                         visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: BufferSize::new(4),
+                        ty: BindingType::StorageTexture {
+                            access: StorageTextureAccess::ReadWrite,
+                            format: TextureFormat::Rgba8Unorm,
+                            view_dimension: TextureViewDimension::D3,
                         },
                         count: None,
                     },
@@ -172,11 +186,11 @@ impl Plugin for VoxelWorldPlugin {
                 // },
                 BindGroupEntry {
                     binding: 1,
-                    resource: BindingResource::TextureView(&bricks),
+                    resource: brickmap.as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: brickmap.as_entire_binding(),
+                    resource: BindingResource::TextureView(&bricks),
                 },
             ],
         });
@@ -233,11 +247,11 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             // },
             BindGroupEntry {
                 binding: 1,
-                resource: BindingResource::TextureView(&voxel_data.bricks),
+                resource: voxel_data.brickmap.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: 2,
-                resource: voxel_data.brickmap.as_entire_binding(),
+                resource: BindingResource::TextureView(&voxel_data.bricks),
             },
         ],
     });
