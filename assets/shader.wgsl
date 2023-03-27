@@ -1,6 +1,6 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader
 
-const BRICK_SIZE: u32 = 5u; // brick size as a power of 2
+const BRICK_SIZE: u32 = 4u; // brick size as a power of 2
 
 struct MainPassUniforms {
     camera: mat4x4<f32>,
@@ -103,9 +103,15 @@ fn ray_plane(r: Ray, pos: vec3<f32>, normal: vec3<f32>) -> vec4<f32> {
     return vec4(0.0);
 }
 
+struct Voxel {
+    col: vec4<f32>,
+    pos: vec3<f32>,
+    half_size: f32,
+};
+
 struct HitInfo {
     hit: bool,
-    data: vec4<f32>,
+    voxel: Voxel,
     pos: vec3<f32>,
     normal: vec3<f32>,
     steps: u32,
@@ -119,16 +125,17 @@ fn shoot_ray(r: Ray) -> HitInfo {
         // Get position on surface of the octree
         let dist = ray_box_dist(Ray(pos, dir), vec3(-1.0), vec3(1.0)).x;
         if (dist == 0.0) {
-            return HitInfo(false, vec4(0.0), vec3(0.0), vec3(0.0), 0u);
+            return HitInfo(false, Voxel(vec4(0.0), vec3(0.0), 0.0), vec3(0.0), vec3(0.0), 0u);
         }
 
         pos = pos + dir * dist;
     }
 
+    // step through the octree using multilevel dda
     var r_sign = sign(dir);
     var normal = trunc(pos * 1.00001);
     var tcpotr = pos * 0.999999; // the current position of the ray
-    var steps = 0u;
+    var steps = 1u;
     var brick = Brick(0u, vec3(0.0), 0u);
     while (steps < 1000u) {
         brick = find_brick(tcpotr);
@@ -145,17 +152,26 @@ fn shoot_ray(r: Ray) -> HitInfo {
         let pos_in_brick_float_rounded = vec3<f32>(pos_in_brick);
         var t_max_inner = (pos_in_brick_float_rounded - pos_in_brick_float * f32(1u << BRICK_SIZE) + 0.5 + r_sign * 0.5) / dir;
         while (steps < 1000u) {
-            let data = textureLoad(bricks, brick_pos_in_texture + pos_in_brick + vec3(118));
-            if (any(data.rgb != vec3(0.0))) {
-                return HitInfo(true, data, tcpotr + normal * 0.000003, normal, steps);
+            let col = textureLoad(bricks, brick_pos_in_texture + pos_in_brick + vec3(120));
+            if (any(col.rgb != vec3(0.0))) {
+                // undo preperation for next step
+                t_max_inner += normal / dir;
+
+                // get world space pos of the hit
+                let t_current_inner = min(min(t_max_inner.x, t_max_inner.y), t_max_inner.z);
+                let pos_in_brick = pos_in_brick_float * f32(1u << BRICK_SIZE) + dir * t_current_inner - normal * 0.000002;
+                tcpotr = brick.pos + (pos_in_brick / f32(1u << BRICK_SIZE) * 2.0 - 1.0) / f32(1u << brick.depth);
+
+                let half_size = 1.0 / f32(1u << (brick.depth + BRICK_SIZE));
+                return HitInfo(true, Voxel(col, tcpotr, half_size), tcpotr + normal * 0.000003, normal, steps);
             }
 
             // https://www.shadertoy.com/view/4dX3zl (good old shader toy)
             let mask = vec3<f32>(t_max_inner.xyz <= min(t_max_inner.yzx, t_max_inner.zxy));
             normal = mask * -r_sign;
 
-            pos_in_brick += vec3<i32>(-normal);
             t_max_inner += -normal / dir;
+            pos_in_brick += vec3<i32>(-normal);
 
             steps += 1u;
 
@@ -175,15 +191,13 @@ fn shoot_ray(r: Ray) -> HitInfo {
         tcpotr = pos + dir * t_current - normal * 0.000002;
 
         if (!in_bounds(tcpotr)) {
-            return HitInfo(false, vec4(0.0), vec3(0.0), vec3(0.0), steps);
+            return HitInfo(false, Voxel(vec4(0.0), vec3(0.0), 0.0), vec3(0.0), vec3(0.0), steps);
         }
 
         steps += 1u;
-
-        // return HitInfo(true, vec4(1.0), tcpotr + normal * 0.000003, normal, steps);
     }
 
-    return HitInfo(true, vec4(1.0), tcpotr + normal * 0.000003, normal, steps);
+    return HitInfo(false, Voxel(vec4(0.0), vec3(0.0), 0.0), vec3(0.0), vec3(0.0), steps);
 }
 
 const light_dir = vec3<f32>(0.8, -1.0, 0.8);
@@ -204,34 +218,44 @@ fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> v
     return diffuse * shadow * light_colour;
 }
 
-// fn check_voxel(pos: vec3<f32>) -> f32 {
-//     let voxel = get_value(pos);
-//     return f32(any(voxel.data.rgb != vec3(0.0)));
-// }
-// // https://www.shadertoy.com/view/ldl3DS
-// fn vertex_ao(side: vec2<f32>, corner: f32) -> f32 {
-//     return (side.x + side.y + max(corner, side.x * side.y)) / 3.1;
-// }
-// fn voxel_ao(pos: vec3<f32>, d1: vec3<f32>, d2: vec3<f32>) -> vec4<f32> {
-//     let side = vec4(check_voxel(pos + d1), check_voxel(pos + d2), check_voxel(pos - d1), check_voxel(pos - d2));
-//     let corner = vec4(
-//         check_voxel(pos + d1 + d2), 
-//         check_voxel(pos - d1 + d2), 
-//         check_voxel(pos - d1 - d2), 
-//         check_voxel(pos + d1 - d2)
-//     );
+fn check_voxel(pos: vec3<f32>) -> f32 {
+    let brick = find_brick(pos);
+    let reletive_pos = (pos - brick.pos) * f32(1u << brick.depth);
+    let dim = textureDimensions(bricks);
+    let texture_pos = vec3(
+        i32(brick.index) / (dim.y * dim.z),
+        i32(brick.index) / dim.z % dim.y,
+        i32(brick.index) % dim.z,
+    );
 
-//     var ao: vec4<f32>;
-//     ao.x = vertex_ao(side.xy, corner.x);
-//     ao.y = vertex_ao(side.yz, corner.y);
-//     ao.z = vertex_ao(side.zw, corner.z);
-//     ao.w = vertex_ao(side.wx, corner.w);
+    let texture_offset = vec3<i32>(f32(1u << BRICK_SIZE) * (reletive_pos * 0.5 + 0.5)) + vec3(120);
+    let data = textureLoad(bricks, texture_pos + texture_offset);
+    return f32(any(data.rgb != vec3(0.0)));
+}
+// https://www.shadertoy.com/view/ldl3DS
+fn vertex_ao(side: vec2<f32>, corner: f32) -> f32 {
+    return (side.x + side.y + max(corner, side.x * side.y)) / 3.1;
+}
+fn voxel_ao(pos: vec3<f32>, d1: vec3<f32>, d2: vec3<f32>) -> vec4<f32> {
+    let side = vec4(check_voxel(pos + d1), check_voxel(pos + d2), check_voxel(pos - d1), check_voxel(pos - d2));
+    let corner = vec4(
+        check_voxel(pos + d1 + d2), 
+        check_voxel(pos - d1 + d2), 
+        check_voxel(pos - d1 - d2), 
+        check_voxel(pos + d1 - d2)
+    );
 
-//     return 1.0 - ao;
-// }
-// fn glmod(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
-//     return x - y * floor(x / y);
-// }
+    var ao: vec4<f32>;
+    ao.x = vertex_ao(side.xy, corner.x);
+    ao.y = vertex_ao(side.yz, corner.y);
+    ao.z = vertex_ao(side.zw, corner.z);
+    ao.w = vertex_ao(side.wx, corner.w);
+
+    return 1.0 - ao;
+}
+fn glmod(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
+    return x - y * floor(x / y);
+}
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
@@ -247,27 +271,29 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let hit = shoot_ray(ray);
     if (hit.hit) {
         // direct lighting
-        let direct_lighting = calculate_direct(hit.data, hit.pos, hit.normal);
+        let direct_lighting = calculate_direct(hit.voxel.col, hit.pos, hit.normal);
 
         // aproximate indirect with ambient and voxel ao
         var indirect_lighting = vec3(0.3);
-        // if (uniforms.indirect_lighting != 0u) {
-        //     let coords = hit.voxel.pos + 2.0 * hit.normal * hit.voxel.half_size;
-        //     let scaled_offset = 2.0 * hit.normal * hit.voxel.half_size;
-        //     let ao = voxel_ao(coords, scaled_offset.zxy, scaled_offset.yzx);
-        //     let uv = glmod(vec2(
-        //         dot(hit.normal * hit.pos.yzx, vec3(1.0)), 
-        //         dot(hit.normal * hit.pos.zxy, vec3(1.0))
-        //     ), vec2(2.0 * hit.voxel.half_size)) / (2.0 * hit.voxel.half_size);
+        if (uniforms.indirect_lighting != 0u) {
+            let coords = hit.pos + hit.normal * hit.voxel.half_size;
+            let scaled_offset = 2.0 * hit.normal * hit.voxel.half_size;
+            let ao = voxel_ao(coords, scaled_offset.zxy, scaled_offset.yzx);
+            let uv = glmod(vec2(
+                dot(hit.normal * hit.pos.yzx, vec3(1.0)), 
+                dot(hit.normal * hit.pos.zxy, vec3(1.0))
+            ), vec2(2.0 * hit.voxel.half_size)) / (2.0 * hit.voxel.half_size);
 
-        //     var interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
-        //     interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
+            var interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
+            interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
 
-        //     indirect_lighting = vec3(interpolated_ao * 0.3);
-        // }
+            indirect_lighting = vec3(interpolated_ao * 0.3);
+        }
 
         // final blend
-        output_colour = (direct_lighting + indirect_lighting) * hit.data.rgb;
+        output_colour = (direct_lighting + indirect_lighting) * hit.voxel.col.rgb;
+
+        // output_colour = hit.pos;
     } else {
         output_colour = vec3(0.4);
     }
