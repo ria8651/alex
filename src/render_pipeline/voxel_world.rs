@@ -123,14 +123,15 @@ impl Plugin for VoxelWorldPlugin {
             octree[index] = octree.len() as u32;
             octree.extend(&[0; 8]);
         };
-        for i in 2..10 {
+        for i in 0..100 {
             subdivide(i);
         }
         for i in 0..octree.len() {
             octree[i] = octree[i] | ((i as u32) << 16);
         }
-        let data = &octree.as_slice() as *const &[u32] as *const &[u8];
-        let data: &[u8] = unsafe { &*data };
+        let (head, data, tail) = unsafe { octree.align_to::<u8>() };
+        assert!(head.is_empty());
+        assert!(tail.is_empty());
 
         // storage
         let brickmap = render_device.create_buffer_with_data(&BufferInitDescriptor {
