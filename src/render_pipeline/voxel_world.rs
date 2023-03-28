@@ -1,3 +1,4 @@
+use crate::render_pipeline::load_anvil::load_anvil;
 use bevy::{
     prelude::*,
     render::{
@@ -5,7 +6,6 @@ use bevy::{
         renderer::{RenderDevice, RenderQueue},
         RenderApp, RenderSet,
     },
-    utils::HashMap,
 };
 
 pub struct VoxelWorldPlugin;
@@ -26,77 +26,12 @@ impl Plugin for VoxelWorldPlugin {
         // let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());
         // uniform_buffer.write_buffer(render_device, render_queue);
 
-        // initialize bricks texture
-        let mut texture_data = vec![0; 256 * 256 * 256 * 4];
+        let (octree, texture_data) = load_anvil();
 
-        // load mc palette
-        let file = std::fs::File::open("assets/palette/blockstates.json");
-        let mut json: HashMap<String, [u8; 4]> = serde_json::from_reader(file.unwrap()).unwrap();
-        json.insert("minecraft:grass".to_string(), [0, 0, 0, 0]);
-        json.insert("minecraft:tall_grass".to_string(), [0, 0, 0, 0]);
-        json.insert("minecraft:grass_block".to_string(), [62, 204, 18, 255]);
-        json.insert("minecraft:water".to_string(), [20, 105, 201, 255]);
-        json.insert("minecraft:cave_air".to_string(), [0, 0, 0, 0]);
-        json.insert("minecraft:lava".to_string(), [255, 123, 0, 0]);
-        json.insert("minecraft:seagrass".to_string(), [62, 204, 18, 0]);
-        json.insert("minecraft:deepslate".to_string(), [77, 77, 77, 0]);
-        json.insert("minecraft:oak_log".to_string(), [112, 62, 8, 0]);
-        json.insert("minecraft:oak_stairs".to_string(), [112, 62, 8, 0]);
-
-        // load chunks into the texture
-        use fastanvil::{CurrentJavaChunk, Region};
-        use fastnbt::from_bytes;
-
-        let file = std::fs::File::open("assets/r.0.0.mca").unwrap();
-        let mut region = Region::from_stream(file).unwrap();
-
-        for chunk_x in 0..16 {
-            for chunk_z in 0..16 {
-                let data = region.read_chunk(chunk_x, chunk_z).unwrap().unwrap();
-                let chunk: CurrentJavaChunk = from_bytes(data.as_slice()).unwrap();
-                let section_tower = chunk.sections.unwrap();
-
-                for chunk_y in 0..16 {
-                    let section = section_tower.get_section_for_y(chunk_y * 16 - 64).unwrap();
-                    let block_states = &section.block_states;
-
-                    for x in 0..16 {
-                        for y in 0..16 {
-                            for z in 0..16 {
-                                let tx = chunk_x as usize * 16 + x;
-                                let ty = chunk_y as usize * 16 + y;
-                                let tz = chunk_z as usize * 16 + z;
-
-                                let block = block_states.at(x, y, z);
-                                if block.unwrap().name() == "minecraft:air" {
-                                    continue;
-                                }
-
-                                // let block_encoded = block.unwrap().encoded_description();
-                                // let block_name =
-                                //     block_encoded.strip_suffix("|").unwrap_or(block_encoded);
-                                let block_name = block.unwrap().name();
-                                let colour = json.get(block_name).unwrap_or(&[255, 0, 0, 0]);
-
-                                match json.get(block_name) {
-                                    Some(_) => {}
-                                    None => {
-                                        // println!("{} not found", block_name);
-                                    }
-                                }
-
-                                let index = 4 * (tz * 65536 + ty * 256 + tx);
-                                texture_data[index] = colour[0];
-                                texture_data[index + 1] = colour[1];
-                                texture_data[index + 2] = colour[2];
-                                texture_data[index + 3] = colour[3];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        let (head, data, tail) = unsafe { octree.align_to::<u8>() };
+        assert!(head.is_empty());
+        assert!(tail.is_empty());
+        
         // texture
         let bricks = render_device.create_texture_with_data(
             render_queue,
@@ -117,21 +52,6 @@ impl Plugin for VoxelWorldPlugin {
             &texture_data,
         );
         let bricks = bricks.create_view(&TextureViewDescriptor::default());
-
-        let mut octree = vec![0; 8];
-        let mut subdivide = |index: usize| {
-            octree[index] = octree.len() as u32;
-            octree.extend(&[0; 8]);
-        };
-        for i in 0..100 {
-            subdivide(i);
-        }
-        for i in 0..octree.len() {
-            octree[i] = octree[i] | ((i as u32) << 16);
-        }
-        let (head, data, tail) = unsafe { octree.align_to::<u8>() };
-        assert!(head.is_empty());
-        assert!(tail.is_empty());
 
         // storage
         let brickmap = render_device.create_buffer_with_data(&BufferInitDescriptor {

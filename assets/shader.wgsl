@@ -63,11 +63,11 @@ fn find_brick(pos: vec3<f32>) -> Brick {
             u32(pos.y >= node_pos.y),
             u32(pos.z >= node_pos.z)
         );
-        let child_index = p.x * 4u + p.y * 2u + p.z;
 
         depth = depth + 1u;
         node_pos = node_pos + (vec3<f32>(p) * 2.0 - 1.0) / f32(1u << depth);
 
+        let child_index = p.x * 4u + p.y * 2u + p.z;
         let new_node_index = node_index + child_index;
         let new_node = brickmap[new_node_index];
         if ((new_node & 0xFFFFu) == 0u) {
@@ -79,6 +79,13 @@ fn find_brick(pos: vec3<f32>) -> Brick {
 
     // unreachable (hopefully)
     return Brick(0u, vec3(1.0, 0.0, 0.0), 0u);
+
+    // let depth = 4u;
+    // let brick_pos = vec3<u32>((pos * 0.5 + 0.5) * f32(1u << depth));
+    // let rounded_pos = (vec3<f32>(brick_pos) + 0.5) / f32(1u << depth) * 2.0 - 1.0;
+    // let index = brick_pos.x * (1u << (2u * depth)) + brick_pos.y * (1u << depth) + brick_pos.z;
+
+    // return Brick(index, rounded_pos, depth);
 }
 
 // maps a point form the -1 to 1 cube to a point in the cube l to u
@@ -137,46 +144,48 @@ fn shoot_ray(r: Ray) -> HitInfo {
     var tcpotr = pos * 0.999999; // the current position of the ray
     var steps = 1u;
     var brick = Brick(0u, vec3(0.0), 0u);
-    while (steps < 1000u) {
+    while (steps < 500u) {
         brick = find_brick(tcpotr);
 
-        // step through the brick using dda
-        let dim = textureDimensions(bricks).x;
-        let brick_pos_in_texture = vec3(
-            i32(brick.index) % dim,
-            (i32(brick.index) / dim) % dim,
-            i32(brick.index) / (dim * dim),
-        ) * i32(1u << BRICK_SIZE);
-        let pos_in_brick_float = (tcpotr - brick.pos) * f32(1u << brick.depth) * 0.5 + 0.5;
-        var pos_in_brick = vec3<i32>(pos_in_brick_float * f32(1u << BRICK_SIZE));
-        let pos_in_brick_float_rounded = vec3<f32>(pos_in_brick);
-        var t_max_inner = (pos_in_brick_float_rounded - pos_in_brick_float * f32(1u << BRICK_SIZE) + 0.5 + r_sign * 0.5) / dir;
-        while (steps < 1000u) {
-            let col = textureLoad(bricks, brick_pos_in_texture + pos_in_brick);
-            if (any(col.rgb != vec3(0.0))) {
-                // undo preperation for next step
-                t_max_inner += normal / dir;
+        if (brick.index != 0u) {
+            // step through the brick using dda
+            let dim = textureDimensions(bricks).x / i32(1u << BRICK_SIZE);
+            let brick_pos_in_texture = vec3(
+                i32(brick.index) / (dim * dim),
+                (i32(brick.index) / dim) % dim,
+                i32(brick.index) % dim,
+            ) * i32(1u << BRICK_SIZE);
+            let pos_in_brick_float = (tcpotr - brick.pos) * f32(1u << brick.depth) * 0.5 + 0.5;
+            var pos_in_brick = vec3<i32>(pos_in_brick_float * f32(1u << BRICK_SIZE));
+            let pos_in_brick_float_rounded = vec3<f32>(pos_in_brick);
+            var t_max_inner = (pos_in_brick_float_rounded - pos_in_brick_float * f32(1u << BRICK_SIZE) + 0.5 + r_sign * 0.5) / dir;
+            while (steps < 500u) {
+                let col = textureLoad(bricks, brick_pos_in_texture + pos_in_brick);
+                if (any(col.rgb != vec3(0.0))) {
+                    // undo preperation for next step
+                    t_max_inner += normal / dir;
 
-                // get world space pos of the hit
-                let t_current_inner = min(min(t_max_inner.x, t_max_inner.y), t_max_inner.z);
-                let pos_in_brick_world = pos_in_brick_float * f32(1u << BRICK_SIZE) + dir * t_current_inner - normal * 0.000002;
-                tcpotr = brick.pos + (pos_in_brick_world / f32(1u << BRICK_SIZE) * 2.0 - 1.0) / f32(1u << brick.depth);
+                    // get world space pos of the hit
+                    let t_current_inner = min(min(t_max_inner.x, t_max_inner.y), t_max_inner.z);
+                    let pos_in_brick_world = pos_in_brick_float * f32(1u << BRICK_SIZE) + dir * t_current_inner - normal * 0.000002;
+                    tcpotr = brick.pos + (pos_in_brick_world / f32(1u << BRICK_SIZE) * 2.0 - 1.0) / f32(1u << brick.depth);
 
-                let half_size = 1.0 / f32(1u << (brick.depth + BRICK_SIZE));
-                return HitInfo(true, Voxel(col, tcpotr, half_size), tcpotr + normal * 0.000003, normal, steps);
-            }
+                    let half_size = 1.0 / f32(1u << (brick.depth + BRICK_SIZE));
+                    return HitInfo(true, Voxel(col, tcpotr, half_size), tcpotr + normal * 0.000003, normal, steps);
+                }
 
-            // https://www.shadertoy.com/view/4dX3zl (good old shader toy)
-            let mask = vec3<f32>(t_max_inner.xyz <= min(t_max_inner.yzx, t_max_inner.zxy));
-            normal = mask * -r_sign;
+                // https://www.shadertoy.com/view/4dX3zl (good old shader toy)
+                let mask = vec3<f32>(t_max_inner.xyz <= min(t_max_inner.yzx, t_max_inner.zxy));
+                normal = mask * -r_sign;
 
-            t_max_inner += -normal / dir;
-            pos_in_brick += vec3<i32>(-normal);
+                t_max_inner += -normal / dir;
+                pos_in_brick += vec3<i32>(-normal);
 
-            steps += 1u;
+                steps += 1u;
 
-            if (any(pos_in_brick < vec3(0)) || any(pos_in_brick >= vec3(i32(1u << BRICK_SIZE)))) {
-                break;
+                if (any(pos_in_brick < vec3(0)) || any(pos_in_brick >= vec3(i32(1u << BRICK_SIZE)))) {
+                    break;
+                }
             }
         }
 
@@ -221,12 +230,12 @@ fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> v
 fn check_voxel(pos: vec3<f32>) -> f32 {
     let brick = find_brick(pos);
     let reletive_pos = (pos - brick.pos) * f32(1u << brick.depth);
-    let dim = textureDimensions(bricks);
+    let dim = textureDimensions(bricks) / i32(1u << BRICK_SIZE);
     let texture_pos = vec3(
         i32(brick.index) / (dim.y * dim.z),
         i32(brick.index) / dim.z % dim.y,
         i32(brick.index) % dim.z,
-    );
+    ) * i32(1u << BRICK_SIZE);
 
     let texture_offset = vec3<i32>(f32(1u << BRICK_SIZE) * (reletive_pos * 0.5 + 0.5));
     let data = textureLoad(bricks, texture_pos + texture_offset);
@@ -275,7 +284,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 
         // aproximate indirect with ambient and voxel ao
         var indirect_lighting = vec3(0.3);
-        if (uniforms.indirect_lighting != 0u) {
+        // if (uniforms.indirect_lighting != 0u) {
             let coords = hit.pos + hit.normal * hit.voxel.half_size;
             let scaled_offset = 2.0 * hit.normal * hit.voxel.half_size;
             let ao = voxel_ao(coords, scaled_offset.zxy, scaled_offset.yzx);
@@ -288,7 +297,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
             interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
 
             indirect_lighting = vec3(interpolated_ao * 0.3);
-        }
+        // }
 
         // final blend
         output_colour = (direct_lighting + indirect_lighting) * hit.voxel.col.rgb;
@@ -301,15 +310,6 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     if (uniforms.show_ray_steps != 0u) {
         output_colour = vec3(f32(hit.steps) / 100.0);
     }
-
-    // let i = vec2<i32>(in.uv * 10.0);
-    // let index = i.x + i.y * 10;
-    // let node = brickmap[index];
-    // if (uniforms.misc_bool != 0u) {
-    //     output_colour = vec3(f32(node & 0xFFFFu) / 100.0);
-    // } else {
-    //     output_colour = vec3(f32(node >> 16u) / 100.0);
-    // }
 
     output_colour = max(output_colour, vec3(0.0));
     return vec4<f32>(output_colour, 1.0);
