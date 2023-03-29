@@ -26,7 +26,8 @@ impl Plugin for VoxelWorldPlugin {
         // let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());
         // uniform_buffer.write_buffer(render_device, render_queue);
 
-        let (octree, texture_data) = load_anvil();
+        let brick_texture_size = 512;
+        let (octree, texture_data) = load_anvil(brick_texture_size);
 
         let (head, data, tail) = unsafe { octree.align_to::<u8>() };
         assert!(head.is_empty());
@@ -39,9 +40,9 @@ impl Plugin for VoxelWorldPlugin {
                 label: None,
                 view_formats: &[TextureFormat::Rgba8Unorm],
                 size: Extent3d {
-                    width: 256,
-                    height: 256,
-                    depth_or_array_layers: 256,
+                    width: brick_texture_size,
+                    height: brick_texture_size,
+                    depth_or_array_layers: brick_texture_size,
                 },
                 mip_level_count: 1,
                 sample_count: 1,

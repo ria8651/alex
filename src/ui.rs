@@ -1,7 +1,7 @@
-use crate::render_pipeline::MainPassSettings;
+use crate::{character::CharacterEntity, render_pipeline::MainPassSettings};
 use bevy::{
     core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
-    diagnostic::{FrameTimeDiagnosticsPlugin, Diagnostics},
+    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
     prelude::*,
     window::PrimaryWindow,
 };
@@ -31,7 +31,10 @@ fn ui_system(
     )>,
     window: Query<Entity, With<PrimaryWindow>>,
     diagnostics: Res<Diagnostics>,
+    mut character: Query<&mut Transform, With<CharacterEntity>>,
 ) {
+    let mut character = character.single_mut();
+
     egui::Window::new("Settings")
         .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
         .show(egui_context.ctx_for_window_mut(window.single()), |ui| {
@@ -123,6 +126,20 @@ fn ui_system(
                             }
                         }
                     });
+            }
+
+            if ui.button("print pos rot").clicked() {
+                println!("{:?}, {:?}", character.translation, character.rotation);
+            }
+            if ui.button("go to pos1").clicked() {
+                character.translation = Vec3::new(-0.5151253, -0.124093756, 0.77565575);
+                character.rotation =
+                    Quat::from_array([0.041948874, 0.17606115, -0.0075151, 0.9834563]);
+            }
+            if ui.button("go to pos2").clicked() {
+                character.translation = Vec3::new(-0.26596254, 0.31184837, 0.95114636);
+                character.rotation =
+                    Quat::from_array([-0.24431482, 0.2940709, 0.07802672, 0.9207303]);
             }
         });
 }

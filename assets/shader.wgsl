@@ -80,7 +80,8 @@ fn find_brick(pos: vec3<f32>) -> Brick {
     // unreachable (hopefully)
     return Brick(0u, vec3(1.0, 0.0, 0.0), 0u);
 
-    // let depth = 4u;
+    // let dim = f32(textureDimensions(bricks).x) / f32(1u << BRICK_SIZE);
+    // let depth = u32(log2(dim));
     // let brick_pos = vec3<u32>((pos * 0.5 + 0.5) * f32(1u << depth));
     // let rounded_pos = (vec3<f32>(brick_pos) + 0.5) / f32(1u << depth) * 2.0 - 1.0;
     // let index = brick_pos.x * (1u << (2u * depth)) + brick_pos.y * (1u << depth) + brick_pos.z;
@@ -230,11 +231,11 @@ fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> v
 fn check_voxel(pos: vec3<f32>) -> f32 {
     let brick = find_brick(pos);
     let reletive_pos = (pos - brick.pos) * f32(1u << brick.depth);
-    let dim = textureDimensions(bricks) / i32(1u << BRICK_SIZE);
+    let dim = textureDimensions(bricks).x / i32(1u << BRICK_SIZE);
     let texture_pos = vec3(
-        i32(brick.index) / (dim.y * dim.z),
-        i32(brick.index) / dim.z % dim.y,
-        i32(brick.index) % dim.z,
+        i32(brick.index) / (dim * dim),
+        i32(brick.index) / dim % dim,
+        i32(brick.index) % dim,
     ) * i32(1u << BRICK_SIZE);
 
     let texture_offset = vec3<i32>(f32(1u << BRICK_SIZE) * (reletive_pos * 0.5 + 0.5));

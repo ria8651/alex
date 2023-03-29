@@ -18,26 +18,24 @@ pub fn load_palette() -> HashMap<String, [u8; 4]> {
     json
 }
 
-pub fn load_anvil() -> (Vec<u32>, Vec<u8>) {
-    let depth = 5;
+pub fn load_anvil(brick_texture_size: u32) -> (Vec<u32>, Vec<u8>) {
+    let depth = 7;
     let side_length_bricks = 1 << depth;
-    // for now i'm assuming brick size is 2^4 (16)
-    // let brick_size = 4;
 
     // initialize data structures
     let mut brick_map = vec![0; 8];
-    let mut bricks = vec![0; 256 * 256 * 256 * 4];
+    let mut bricks = vec![0; (brick_texture_size as usize).pow(3) * 4];
     let mut current_brick_index = 1;
 
     // load mc palette
     let palette = load_palette();
 
     let mut add_brick = |block_data: &BlockData<Block>| -> Result<u32, String> {
-        if current_brick_index >= (256u32 / 16).pow(3) {
+        if current_brick_index >= (brick_texture_size / 16).pow(3) {
             return Err("ran out of bricks".to_string());
         }
 
-        let dim = 256 / 16;
+        let dim = brick_texture_size / 16;
         let brick_offset = UVec3::new(
             current_brick_index / (dim * dim),
             current_brick_index / dim % dim,
@@ -56,8 +54,10 @@ pub fn load_anvil() -> (Vec<u32>, Vec<u8>) {
                     let colour = palette.get(block_name).unwrap_or(&[255, 0, 0, 0]);
 
                     let pos = UVec3::new(x, y, z) + brick_offset;
-                    let index =
-                        4 * (pos.z as usize * 65536 + pos.y as usize * 256 + pos.x as usize);
+                    let index = 4
+                        * (pos.z as usize * brick_texture_size.pow(2) as usize
+                            + pos.y as usize * brick_texture_size as usize
+                            + pos.x as usize);
                     bricks[index] = colour[0];
                     bricks[index + 1] = colour[1];
                     bricks[index + 2] = colour[2];
@@ -108,40 +108,57 @@ pub fn load_anvil() -> (Vec<u32>, Vec<u8>) {
     use fastanvil::{CurrentJavaChunk, Region};
     use fastnbt::from_bytes;
 
-    let file = std::fs::File::open("assets/r.0.0.mca").unwrap();
-    let mut region = Region::from_stream(file).unwrap();
+    let side_length_regions = (side_length_bricks / 32).max(1);
 
-    'outer: for chunk_x in 0..side_length_bricks {
-        for chunk_z in 0..side_length_bricks {
-            if let Some(data) = region
-                .read_chunk(chunk_x as usize, chunk_z as usize)
-                .unwrap()
-            {
-                let chunk: CurrentJavaChunk = from_bytes(data.as_slice()).unwrap();
-                let section_tower = chunk.sections.unwrap();
+    for region_x in 0..side_length_regions {
+        for region_y in 0..side_length_regions {
+            let path = format!("assets/region/r.{}.{}.mca", region_x, region_y);
+            if let Ok(file) = std::fs::File::open(path) {
+                let mut region = Region::from_stream(file).unwrap();
 
-                for section in section_tower.sections() {
-                    if section.block_states.palette().len() <= 1 {
-                        continue;
-                    }
+                'outer: for chunk_x in 0..side_length_bricks.min(32) {
+                    for chunk_z in 0..side_length_bricks.min(32) {
+                        if let Some(data) = region
+                            .read_chunk(chunk_x as usize, chunk_z as usize)
+                            .unwrap()
+                        {
+                            let chunk: CurrentJavaChunk = from_bytes(data.as_slice()).unwrap();
+                            let section_tower = chunk.sections.unwrap();
 
-                    let block_data = &section.block_states;
-                    let pos = IVec3::new(
-                        chunk_x as i32 - side_length_bricks / 2,
-                        section.y as i32,
-                        chunk_z as i32 - side_length_bricks / 2,
-                    );
-                    match place_section(block_data, pos) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            println!("{}", e);
-                            break 'outer;
+                            for section in section_tower.sections() {
+                                if section.block_states.palette().len() <= 1 {
+                                    continue;
+                                }
+
+                                let block_data = &section.block_states;
+                                let pos = IVec3::new(
+                                    32 * region_x + chunk_x as i32 - side_length_bricks / 2,
+                                    section.y as i32,
+                                    32 * region_y + chunk_z as i32 - side_length_bricks / 2,
+                                );
+                                match place_section(block_data, pos) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        println!("{}", e);
+                                        break 'outer;
+                                    }
+                                };
+                            }
                         }
-                    };
+                    }
                 }
             }
         }
     }
+
+    // let data = region.read_chunk(0, 0).unwrap().unwrap();
+    // let chunk: CurrentJavaChunk = from_bytes(data.as_slice()).unwrap();
+    // let section_tower = chunk.sections.unwrap();
+    // place_section(
+    //     &section_tower.get_section_for_y(64).unwrap().block_states,
+    //     IVec3::new(15, 0, 15),
+    // )
+    // .unwrap();
 
     println!("{:?}", current_brick_index);
     println!("{:?}", brick_map.len());
