@@ -18,28 +18,32 @@ pub fn load_palette() -> HashMap<String, [u8; 4]> {
     json
 }
 
-pub fn load_anvil(brick_texture_size: u32) -> (Vec<u32>, Vec<u8>) {
-    let depth = 7;
+fn mult_fold(v: UVec3) -> usize {
+    v.x as usize * v.y as usize * v.z as usize
+}
+
+pub fn load_anvil(brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
+    let depth = 4;
     let side_length_bricks = 1 << depth;
 
     // initialize data structures
     let mut brick_map = vec![0; 8];
-    let mut bricks = vec![0; (brick_texture_size as usize).pow(3) * 4];
+    let mut bricks = vec![0; 4 * mult_fold(brick_texture_size)];
     let mut current_brick_index = 1;
 
     // load mc palette
     let palette = load_palette();
 
     let mut add_brick = |block_data: &BlockData<Block>| -> Result<u32, String> {
-        if current_brick_index >= (brick_texture_size / 16).pow(3) {
+        if current_brick_index >= mult_fold(brick_texture_size / 16) as u32 {
             return Err("ran out of bricks".to_string());
         }
 
         let dim = brick_texture_size / 16;
         let brick_offset = UVec3::new(
-            current_brick_index / (dim * dim),
-            current_brick_index / dim % dim,
-            current_brick_index % dim,
+            current_brick_index / (dim.z * dim.y),
+            current_brick_index / dim.z % dim.y,
+            current_brick_index % dim.z,
         ) * 16;
 
         for x in 0..16 {
@@ -55,9 +59,9 @@ pub fn load_anvil(brick_texture_size: u32) -> (Vec<u32>, Vec<u8>) {
 
                     let pos = UVec3::new(x, y, z) + brick_offset;
                     let index = 4
-                        * (pos.z as usize * brick_texture_size.pow(2) as usize
-                            + pos.y as usize * brick_texture_size as usize
-                            + pos.x as usize);
+                        * (pos.z * brick_texture_size.x * brick_texture_size.y
+                            + pos.y * brick_texture_size.x
+                            + pos.x) as usize;
                     bricks[index] = colour[0];
                     bricks[index + 1] = colour[1];
                     bricks[index + 2] = colour[2];
@@ -78,7 +82,7 @@ pub fn load_anvil(brick_texture_size: u32) -> (Vec<u32>, Vec<u8>) {
             let p = pos.cmpge(node_pos);
             let o = IVec3::new(p.x as i32, p.y as i32, p.z as i32) * 2 - 1;
             node_depth = node_depth + 1;
-            node_pos = node_pos + o * (1 << (depth - node_depth - 1));
+            node_pos = node_pos + o * (1 << (depth - node_depth - 1).max(0));
 
             let child_index = p.x as usize * 4 + p.y as usize * 2 + p.z as usize;
             let index = node_index + child_index;
@@ -110,13 +114,13 @@ pub fn load_anvil(brick_texture_size: u32) -> (Vec<u32>, Vec<u8>) {
 
     let side_length_regions = (side_length_bricks / 32).max(1);
 
-    for region_x in 0..side_length_regions {
+    'outer: for region_x in 0..side_length_regions {
         for region_y in 0..side_length_regions {
             let path = format!("assets/region/r.{}.{}.mca", region_x, region_y);
             if let Ok(file) = std::fs::File::open(path) {
                 let mut region = Region::from_stream(file).unwrap();
 
-                'outer: for chunk_x in 0..side_length_bricks.min(32) {
+                for chunk_x in 0..side_length_bricks.min(32) {
                     for chunk_z in 0..side_length_bricks.min(32) {
                         if let Some(data) = region
                             .read_chunk(chunk_x as usize, chunk_z as usize)

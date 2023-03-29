@@ -26,13 +26,13 @@ impl Plugin for VoxelWorldPlugin {
         // let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());
         // uniform_buffer.write_buffer(render_device, render_queue);
 
-        let brick_texture_size = 512;
+        let brick_texture_size = UVec3::new(256, 256, 256);
         let (octree, texture_data) = load_anvil(brick_texture_size);
 
         let (head, data, tail) = unsafe { octree.align_to::<u8>() };
         assert!(head.is_empty());
         assert!(tail.is_empty());
-        
+
         // texture
         let bricks = render_device.create_texture_with_data(
             render_queue,
@@ -40,9 +40,9 @@ impl Plugin for VoxelWorldPlugin {
                 label: None,
                 view_formats: &[TextureFormat::Rgba8Unorm],
                 size: Extent3d {
-                    width: brick_texture_size,
-                    height: brick_texture_size,
-                    depth_or_array_layers: brick_texture_size,
+                    width: brick_texture_size.x,
+                    height: brick_texture_size.y,
+                    depth_or_array_layers: brick_texture_size.z,
                 },
                 mip_level_count: 1,
                 sample_count: 1,

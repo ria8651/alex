@@ -150,11 +150,11 @@ fn shoot_ray(r: Ray) -> HitInfo {
 
         if (brick.index != 0u) {
             // step through the brick using dda
-            let dim = textureDimensions(bricks).x / i32(1u << BRICK_SIZE);
+            let dim = textureDimensions(bricks) / i32(1u << BRICK_SIZE);
             let brick_pos_in_texture = vec3(
-                i32(brick.index) / (dim * dim),
-                (i32(brick.index) / dim) % dim,
-                i32(brick.index) % dim,
+                i32(brick.index) / (dim.z * dim.y),
+                (i32(brick.index) / dim.z) % dim.y,
+                i32(brick.index) % dim.z,
             ) * i32(1u << BRICK_SIZE);
             let pos_in_brick_float = (tcpotr - brick.pos) * f32(1u << brick.depth) * 0.5 + 0.5;
             var pos_in_brick = vec3<i32>(pos_in_brick_float * f32(1u << BRICK_SIZE));
@@ -231,11 +231,11 @@ fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> v
 fn check_voxel(pos: vec3<f32>) -> f32 {
     let brick = find_brick(pos);
     let reletive_pos = (pos - brick.pos) * f32(1u << brick.depth);
-    let dim = textureDimensions(bricks).x / i32(1u << BRICK_SIZE);
+    let dim = textureDimensions(bricks) / i32(1u << BRICK_SIZE);
     let texture_pos = vec3(
-        i32(brick.index) / (dim * dim),
-        i32(brick.index) / dim % dim,
-        i32(brick.index) % dim,
+        i32(brick.index) / (dim.z * dim.y),
+        i32(brick.index) / dim.z % dim.y,
+        i32(brick.index) % dim.z,
     ) * i32(1u << BRICK_SIZE);
 
     let texture_offset = vec3<i32>(f32(1u << BRICK_SIZE) * (reletive_pos * 0.5 + 0.5));
