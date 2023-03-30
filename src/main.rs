@@ -20,7 +20,8 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let character_transform = Transform::from_xyz(2.0, 2.0, -1.5).looking_at(Vec3::ZERO, Vec3::Y);
+    let character_transform =
+        Transform::from_xyz(21.035963, 19.771912, -31.12883).looking_at(Vec3::ZERO, Vec3::Y);
     commands.spawn((
         Camera3dBundle {
             transform: character_transform,
@@ -37,7 +38,7 @@ fn setup(mut commands: Commands) {
             }),
             ..default()
         },
-        MainPassSettings::default(),
+        MainPassSettings { ..default() },
         CharacterEntity {
             velocity: Vec3::ZERO,
             grounded: false,

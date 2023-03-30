@@ -22,9 +22,8 @@ fn mult_fold(v: UVec3) -> usize {
     v.x as usize * v.y as usize * v.z as usize
 }
 
-pub fn load_anvil(brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
-    let depth = 4;
-    let side_length_bricks = 1 << depth;
+pub fn load_anvil(brick_map_depth: u32, brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
+    let side_length_bricks = 1 << brick_map_depth;
 
     // initialize data structures
     let mut brick_map = vec![0; 8];
@@ -77,19 +76,18 @@ pub fn load_anvil(brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
     let mut place_section = |block_data: &BlockData<Block>, pos: IVec3| -> Result<(), String> {
         let mut node_index = 0;
         let mut node_pos = IVec3::new(0, 0, 0);
-        let mut node_depth = 0;
+        let mut node_depth = 1;
         loop {
-            let p = pos.cmpge(node_pos);
-            let o = IVec3::new(p.x as i32, p.y as i32, p.z as i32) * 2 - 1;
-            node_depth = node_depth + 1;
-            node_pos = node_pos + o * (1 << (depth - node_depth - 1).max(0));
+            let offset = IVec3::splat(1 << (brick_map_depth - node_depth));
+            let mask = pos.cmpge(node_pos + offset);
+            node_pos = node_pos + IVec3::select(mask, offset, IVec3::ZERO);
 
-            let child_index = p.x as usize * 4 + p.y as usize * 2 + p.z as usize;
+            let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
             let index = node_index + child_index;
 
             let mut new_node = brick_map[index] as usize;
             if (new_node & 0xFFFF) == 0 {
-                if node_depth == depth {
+                if node_depth == brick_map_depth {
                     // place in data
                     let brick_index = add_brick(block_data)?;
                     brick_map[index] = brick_index << 16;
@@ -104,6 +102,7 @@ pub fn load_anvil(brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
                 }
             }
 
+            node_depth += 1;
             node_index = new_node & 0xFFFF;
         }
     };
@@ -136,9 +135,9 @@ pub fn load_anvil(brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
 
                                 let block_data = &section.block_states;
                                 let pos = IVec3::new(
-                                    32 * region_x + chunk_x as i32 - side_length_bricks / 2,
-                                    section.y as i32,
-                                    32 * region_y + chunk_z as i32 - side_length_bricks / 2,
+                                    32 * region_x + chunk_x as i32,
+                                    section.y as i32 + side_length_bricks / 2,
+                                    32 * region_y + chunk_z as i32,
                                 );
                                 match place_section(block_data, pos) {
                                     Ok(_) => {}
@@ -155,12 +154,14 @@ pub fn load_anvil(brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
         }
     }
 
+    // let file = std::fs::File::open("assets/region/r.0.0.mca").unwrap();
+    // let mut region = Region::from_stream(file).unwrap();
     // let data = region.read_chunk(0, 0).unwrap().unwrap();
     // let chunk: CurrentJavaChunk = from_bytes(data.as_slice()).unwrap();
     // let section_tower = chunk.sections.unwrap();
     // place_section(
     //     &section_tower.get_section_for_y(64).unwrap().block_states,
-    //     IVec3::new(15, 0, 15),
+    //     IVec3::new(2, 2, 2),
     // )
     // .unwrap();
 
