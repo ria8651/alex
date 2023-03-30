@@ -53,6 +53,7 @@ fn ui_system(
                         ui.checkbox(&mut trace_settings.show_ray_steps, "Show ray steps");
                         ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
                         ui.checkbox(&mut trace_settings.shadows, "Shadows");
+                        ui.checkbox(&mut trace_settings.show_brick_texture, "Show brick texture");
                         ui.checkbox(&mut trace_settings.misc_bool, "Misc");
                         ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
                         if let Some(bloom_settings) = bloom_settings {
