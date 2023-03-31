@@ -14,6 +14,7 @@ struct MainPassUniforms {
     indirect_lighting: u32,
     shadows: u32,
     show_brick_texture: u32,
+    alpha_cutoff: f32,
     misc_bool: u32,
     misc_float: f32,
 };
@@ -71,7 +72,7 @@ fn find_brick(pos: vec3<i32>) -> Brick {
         var node_pos = vec3(0);
         var depth = 1u;
         loop {
-            let offset = vec3(1 << voxel_uniforms.brick_map_depth - depth);
+            let offset = vec3(1 << (voxel_uniforms.brick_map_depth - depth));
             let mask = vec3<i32>(pos >= node_pos + offset);
             node_pos += mask * offset;
 
@@ -133,7 +134,7 @@ struct HitInfo {
 };
 
 fn in_bounds(v: vec3<f32>) -> bool {
-    return !(any(v < 0.0) || any(v >= f32(1 << voxel_uniforms.brick_map_depth)));
+    return !(any(v < 0.0) || any(v >= f32(1u << voxel_uniforms.brick_map_depth)));
 }
 
 fn shoot_ray(r: Ray) -> HitInfo {
@@ -169,21 +170,21 @@ fn shoot_ray(r: Ray) -> HitInfo {
                 (i32(brick.index) / dim.z) % dim.y,
                 i32(brick.index) % dim.z,
             ) * brick_size;
-            let pos_in_brick_float = (tcpotr - vec3<f32>(brick.pos)) / f32(1u << voxel_uniforms.brick_map_depth - brick.depth) * f32(brick_size);
+            let pos_in_brick_float = (tcpotr - vec3<f32>(brick.pos)) / f32(1u << (voxel_uniforms.brick_map_depth - brick.depth)) * f32(brick_size);
             var pos_in_brick = vec3<i32>(pos_in_brick_float);
             var t_max_inner = (vec3<f32>(pos_in_brick) - pos_in_brick_float + 0.5 + r_sign * 0.5) / dir;
 
             while (steps < 500u) {
                 let col = textureLoad(bricks, brick_pos_in_texture + pos_in_brick);
-                if (any(col.rgb != vec3(0.0))) {
+                if (col.a > uniforms.alpha_cutoff) {
                     // undo preperation for next step
                     t_max_inner += normal / dir;
 
                     // get world space pos of the hit
                     let t_current_inner = min(min(t_max_inner.x, t_max_inner.y), t_max_inner.z);
-                    tcpotr = vec3<f32>(brick.pos) + (pos_in_brick_float + dir * t_current_inner) / f32(brick_size) * f32(1u << voxel_uniforms.brick_map_depth - brick.depth);
+                    tcpotr = vec3<f32>(brick.pos) + (pos_in_brick_float + dir * t_current_inner) / f32(brick_size) * f32(1u << (voxel_uniforms.brick_map_depth - brick.depth));
 
-                    let half_size = f32(1 << voxel_uniforms.brick_map_depth) / f32(1u << BRICK_SIZE + brick.depth + 1u);
+                    let half_size = f32(1u << voxel_uniforms.brick_map_depth) / f32(1u << BRICK_SIZE + brick.depth + 1u);
                     let voxel_pos = vec3<f32>(brick.pos) + (pos_in_brick_float + 0.5) / f32(brick_size);
                     let return_pos = tcpotr + normal * 0.00005 - f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
                     return HitInfo(true, Voxel(col, voxel_pos, half_size), return_pos, normal, steps);
@@ -225,7 +226,7 @@ fn shoot_ray(r: Ray) -> HitInfo {
 }
 
 const light_dir = vec3<f32>(0.8, -1.0, 0.8);
-const light_colour = vec3<f32>(1.0, 1.0, 1.0);
+const light_colour = vec3<f32>(1.0, 1.0, 0.8);
 
 fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
     // diffuse
@@ -261,10 +262,10 @@ fn check_voxel(p: vec3<f32>) -> f32 {
         i32(brick.index) % dim.z,
     ) * brick_size;
 
-    let reletive_pos = (pos - vec3<f32>(brick.pos)) / f32(1u << voxel_uniforms.brick_map_depth - brick.depth);
+    let reletive_pos = (pos - vec3<f32>(brick.pos)) / f32(1u << (voxel_uniforms.brick_map_depth - brick.depth));
     let texture_offset = vec3<i32>(reletive_pos * f32(brick_size));
-    let data = textureLoad(bricks, texture_pos + texture_offset);
-    return f32(any(data.rgb != vec3(0.0)));
+    let col = textureLoad(bricks, texture_pos + texture_offset);
+    return f32(col.a > uniforms.alpha_cutoff);
 }
 // https://www.shadertoy.com/view/ldl3DS
 fn vertex_ao(side: vec2<f32>, corner: f32) -> f32 {
@@ -293,7 +294,7 @@ fn glmod(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    let clip_space = vec2(1.0, -1.0) * (in.uv * 2.0 - 1.0);
+    let clip_space = vec2(1.0, -1.0) * vec2<f32>(in.uv * 2.0 - 1.0);
     var output_colour = vec3(0.0);
 
     let pos4 = uniforms.camera_inverse * vec4(clip_space.x, clip_space.y, 1.0, 1.0);

@@ -39,6 +39,7 @@ pub struct MainPassSettings {
     pub indirect_lighting: bool,
     pub shadows: bool,
     pub show_brick_texture: bool,
+    pub alpha_cutoff: f32,
     pub misc_bool: bool,
     pub misc_float: f32,
 }
@@ -50,6 +51,7 @@ impl Default for MainPassSettings {
             indirect_lighting: false,
             shadows: true,
             show_brick_texture: false,
+            alpha_cutoff: 0.0,
             misc_bool: false,
             misc_float: 1.0,
         }
@@ -65,6 +67,7 @@ pub struct TraceUniforms {
     pub indirect_lighting: u32,
     pub shadows: u32,
     pub show_brick_texture: u32,
+    pub alpha_cutoff: f32,
     pub misc_bool: u32,
     pub misc_float: f32,
 }
@@ -98,6 +101,7 @@ fn prepare_uniforms(
             indirect_lighting: settings.indirect_lighting as u32,
             shadows: settings.shadows as u32,
             show_brick_texture: settings.show_brick_texture as u32,
+            alpha_cutoff: settings.alpha_cutoff,
             misc_bool: settings.misc_bool as u32,
             misc_float: settings.misc_float,
         };

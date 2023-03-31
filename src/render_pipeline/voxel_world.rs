@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::render_pipeline::load_anvil::load_anvil;
 use bevy::{
     prelude::*,
@@ -17,9 +19,10 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // load world
-        let brick_map_depth = 7;
-        let brick_texture_size = UVec3::new(512, 512, 512);
-        let (octree, texture_data) = load_anvil(brick_map_depth, brick_texture_size);
+        let path = PathBuf::from("assets/worlds/hermitcraft7");
+        let brick_map_depth = 6;
+        let brick_texture_size = UVec3::splat(512 + 16 * 4);
+        let (octree, texture_data) = load_anvil(path, brick_map_depth, brick_texture_size);
 
         let (head, data, tail) = unsafe { octree.align_to::<u8>() };
         assert!(head.is_empty());

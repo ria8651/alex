@@ -1,5 +1,9 @@
+use std::path::PathBuf;
+
 use bevy::{prelude::*, utils::HashMap};
 use fastanvil::{Block, BlockData};
+
+const DEFUALT_PALETTE_COL: [u8; 4] = [255, 255, 255, 255];
 
 pub fn load_palette() -> HashMap<String, [u8; 4]> {
     let file = std::fs::File::open("assets/palette/blockstates.json");
@@ -22,7 +26,7 @@ fn mult_fold(v: UVec3) -> usize {
     v.x as usize * v.y as usize * v.z as usize
 }
 
-pub fn load_anvil(brick_map_depth: u32, brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
+pub fn load_anvil(region_path: PathBuf, brick_map_depth: u32, brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
     let side_length_bricks = 1 << brick_map_depth;
 
     // initialize data structures
@@ -55,7 +59,7 @@ pub fn load_anvil(brick_map_depth: u32, brick_texture_size: UVec3) -> (Vec<u32>,
                         }
 
                         let block_name = block.unwrap().name();
-                        let colour = palette.get(block_name).unwrap_or(&[255, 0, 0, 255]);
+                        let colour = palette.get(block_name).unwrap_or(&DEFUALT_PALETTE_COL);
 
                         let pos = UVec3::new(x, y, z) + brick_offset;
                         let index = 4
@@ -115,10 +119,11 @@ pub fn load_anvil(brick_map_depth: u32, brick_texture_size: UVec3) -> (Vec<u32>,
     use fastnbt::from_bytes;
 
     let side_length_regions = (side_length_bricks / 32).max(1);
-
-    'outer: for region_x in 0..side_length_regions {
-        for region_y in 0..side_length_regions {
-            let path = format!("assets/region/r.{}.{}.mca", region_x, region_y);
+    let half_side_length_regions = (side_length_regions / 2).max(1);
+    'outer: for region_x in -half_side_length_regions..half_side_length_regions {
+        for region_y in -half_side_length_regions..half_side_length_regions {
+            let path = region_path.join(format!("r.{}.{}.mca", region_x, region_y));
+            println!("loading {}", path.display());
             if let Ok(file) = std::fs::File::open(path) {
                 let mut region = Region::from_stream(file).unwrap();
 
@@ -138,9 +143,9 @@ pub fn load_anvil(brick_map_depth: u32, brick_texture_size: UVec3) -> (Vec<u32>,
 
                                 let block_data = &section.block_states;
                                 let pos = IVec3::new(
-                                    32 * region_x + chunk_x as i32,
+                                    32 * (region_x + half_side_length_regions) + chunk_x as i32,
                                     section.y as i32 + side_length_bricks / 2,
-                                    32 * region_y + chunk_z as i32,
+                                    32 * (region_y + half_side_length_regions) + chunk_z as i32,
                                 );
                                 match place_section(block_data, pos) {
                                     Ok(_) => {}

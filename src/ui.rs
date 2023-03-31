@@ -54,14 +54,12 @@ fn ui_system(
                         ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
                         ui.checkbox(&mut trace_settings.shadows, "Shadows");
                         ui.checkbox(&mut trace_settings.show_brick_texture, "Show brick texture");
+                        ui.add(
+                            Slider::new(&mut trace_settings.alpha_cutoff, 0.0..=1.0)
+                                .text("Alpha cutoff"),
+                        );
                         ui.checkbox(&mut trace_settings.misc_bool, "Misc");
                         ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
-                        if let Some(bloom_settings) = bloom_settings {
-                            ui.add(
-                                Slider::new(&mut bloom_settings.into_inner().intensity, 0.0..=1.0)
-                                    .text("Bloom"),
-                            );
-                        }
                         if let Some(mut tonemapping) = tonemapping {
                             egui::ComboBox::from_label("")
                                 .selected_text(format!("{:?}", tonemapping.as_mut()))
@@ -102,6 +100,12 @@ fn ui_system(
                                         "None",
                                     );
                                 });
+                        }
+                        if let Some(bloom_settings) = bloom_settings {
+                            ui.add(
+                                Slider::new(&mut bloom_settings.into_inner().intensity, 0.0..=1.0)
+                                    .text("Bloom"),
+                            );
                         }
                         if let Some(fxaa) = fxaa {
                             ui.checkbox(&mut fxaa.into_inner().enabled, "FXAA");
