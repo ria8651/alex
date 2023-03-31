@@ -71,14 +71,14 @@ fn find_brick(pos: vec3<i32>) -> Brick {
         var node_pos = vec3(0);
         var depth = 1u;
         loop {
-            let offset = vec3(1 << (voxel_uniforms.brick_map_depth - depth));
+            let offset = vec3(1 << voxel_uniforms.brick_map_depth - depth);
             let mask = vec3<i32>(pos >= node_pos + offset);
             node_pos += mask * offset;
 
             let child_index = mask.x * 4 + mask.y * 2 + mask.z;
             let new_node_index = node_index + child_index;
             let new_node = brickmap[new_node_index];
-            if ((new_node & 0xFFFFu) == 0u) {
+            if ((new_node & 0xFFFFu) == 0u || depth >= u32(f32(voxel_uniforms.brick_map_depth) * uniforms.misc_float)) {
                 return Brick(new_node >> 16u, node_pos, depth);
             }
 
@@ -92,7 +92,7 @@ fn find_brick(pos: vec3<i32>) -> Brick {
         let brick_pos = vec3<i32>(vec3<f32>(pos) / f32(1u << voxel_uniforms.brick_map_depth) * vec3<f32>(dim));
         let index = brick_pos.x * dim.y * dim.z + brick_pos.y * dim.z + brick_pos.z;
 
-        return Brick(u32(index), brick_pos, u32(log2(f32(dim.x))));
+        return Brick(u32(index), brick_pos, voxel_uniforms.brick_map_depth - u32(log2(f32(dim.x))));
     }
 }
 
@@ -169,7 +169,7 @@ fn shoot_ray(r: Ray) -> HitInfo {
                 (i32(brick.index) / dim.z) % dim.y,
                 i32(brick.index) % dim.z,
             ) * brick_size;
-            let pos_in_brick_float = (tcpotr - vec3<f32>(brick.pos)) * f32(brick_size);
+            let pos_in_brick_float = (tcpotr - vec3<f32>(brick.pos)) / f32(1u << voxel_uniforms.brick_map_depth - brick.depth) * f32(brick_size);
             var pos_in_brick = vec3<i32>(pos_in_brick_float);
             var t_max_inner = (vec3<f32>(pos_in_brick) - pos_in_brick_float + 0.5 + r_sign * 0.5) / dir;
 
@@ -181,7 +181,7 @@ fn shoot_ray(r: Ray) -> HitInfo {
 
                     // get world space pos of the hit
                     let t_current_inner = min(min(t_max_inner.x, t_max_inner.y), t_max_inner.z);
-                    tcpotr = vec3<f32>(brick.pos) + (pos_in_brick_float + dir * t_current_inner) / f32(brick_size);
+                    tcpotr = vec3<f32>(brick.pos) + (pos_in_brick_float + dir * t_current_inner) / f32(brick_size) * f32(1u << voxel_uniforms.brick_map_depth - brick.depth);
 
                     let half_size = f32(1 << voxel_uniforms.brick_map_depth) / f32(1u << BRICK_SIZE + brick.depth + 1u);
                     let voxel_pos = vec3<f32>(brick.pos) + (pos_in_brick_float + 0.5) / f32(brick_size);
@@ -253,7 +253,6 @@ fn check_voxel(p: vec3<f32>) -> f32 {
         return 0.0;
     }
 
-    let reletive_pos = pos - vec3<f32>(brick.pos);
     let brick_size = i32(1u << BRICK_SIZE);
     let dim = textureDimensions(bricks) / brick_size;
     let texture_pos = vec3(
@@ -262,6 +261,7 @@ fn check_voxel(p: vec3<f32>) -> f32 {
         i32(brick.index) % dim.z,
     ) * brick_size;
 
+    let reletive_pos = (pos - vec3<f32>(brick.pos)) / f32(1u << voxel_uniforms.brick_map_depth - brick.depth);
     let texture_offset = vec3<i32>(reletive_pos * f32(brick_size));
     let data = textureLoad(bricks, texture_pos + texture_offset);
     return f32(any(data.rgb != vec3(0.0)));

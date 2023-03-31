@@ -17,8 +17,8 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // load world
-        let brick_map_depth = 5;
-        let brick_texture_size = UVec3::new(512, 512, 256);
+        let brick_map_depth = 7;
+        let brick_texture_size = UVec3::new(512, 512, 512);
         let (octree, texture_data) = load_anvil(brick_map_depth, brick_texture_size);
 
         let (head, data, tail) = unsafe { octree.align_to::<u8>() };
