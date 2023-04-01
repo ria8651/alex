@@ -16,6 +16,7 @@ use bevy::{
 };
 pub use main_pass::MainPassSettings;
 
+mod cpu_brickmap;
 mod load_anvil;
 mod main_pass;
 mod voxel_world;

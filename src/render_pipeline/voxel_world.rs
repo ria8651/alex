@@ -18,13 +18,15 @@ impl Plugin for VoxelWorldPlugin {
         let render_device = app.world.resource::<RenderDevice>();
         let render_queue = app.world.resource::<RenderQueue>();
 
-        // load world
+        // load world (slooowwww)
         let path = PathBuf::from("assets/worlds/hermitcraft7");
         let brick_map_depth = 6;
-        let brick_texture_size = UVec3::splat(512 + 16 * 4);
-        let (octree, texture_data) = load_anvil(path, brick_map_depth, brick_texture_size);
+        let brick_texture_size = UVec3::splat(512);
+        let mut brick_map = load_anvil(path, brick_map_depth);
+        brick_map.recreate_mipmaps();
+        let (brick_map, bricks) = brick_map.to_gpu(brick_texture_size);
 
-        let (head, data, tail) = unsafe { octree.align_to::<u8>() };
+        let (head, data, tail) = unsafe { brick_map.align_to::<u8>() };
         assert!(head.is_empty());
         assert!(tail.is_empty());
 
@@ -50,7 +52,7 @@ impl Plugin for VoxelWorldPlugin {
                 format: TextureFormat::Rgba8Unorm,
                 usage: TextureUsages::STORAGE_BINDING | TextureUsages::COPY_DST,
             },
-            &texture_data,
+            &bricks,
         );
         let bricks = bricks.create_view(&TextureViewDescriptor::default());
 
