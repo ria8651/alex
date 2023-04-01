@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-
-use crate::render_pipeline::load_anvil::load_anvil;
+use super::{cpu_brickmap::CpuBrickmap, load_anvil::load_anvil};
 use bevy::{
     prelude::*,
     render::{
@@ -10,6 +8,16 @@ use bevy::{
         RenderApp, RenderSet,
     },
 };
+use std::{collections::VecDeque, path::PathBuf};
+
+#[derive(Resource, Deref, DerefMut)]
+pub struct CpuVoxelWorld(CpuBrickmap);
+
+#[derive(Resource)]
+pub struct GpuVoxelWorld {
+    pub brickmap_holes: VecDeque<usize>,
+    pub brick_holes: VecDeque<usize>,
+}
 
 pub struct VoxelWorldPlugin;
 
@@ -18,24 +26,41 @@ impl Plugin for VoxelWorldPlugin {
         let render_device = app.world.resource::<RenderDevice>();
         let render_queue = app.world.resource::<RenderQueue>();
 
+        // brickmap settings
+        let brickmap_depth = 5;
+        let brick_texture_size = UVec3::splat(512);
+        let brickmap_max_nodes = 1 << 12;
+
         // load world (slooowwww)
         let path = PathBuf::from("assets/worlds/hermitcraft7");
-        let brick_map_depth = 6;
-        let brick_texture_size = UVec3::splat(512);
-        let mut brick_map = load_anvil(path, brick_map_depth);
-        brick_map.recreate_mipmaps();
-        let (brick_map, bricks) = brick_map.to_gpu(brick_texture_size);
+        let mut brickmap = load_anvil(path, brickmap_depth);
+        brickmap.recreate_mipmaps();
 
-        let (head, data, tail) = unsafe { brick_map.align_to::<u8>() };
-        assert!(head.is_empty());
-        assert!(tail.is_empty());
+        let dim = brick_texture_size / 16;
+        let brick_count = (dim.x * dim.y * dim.z) as usize;
+        let gpu_voxel_world = GpuVoxelWorld {
+            brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
+            brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
+        };
 
         // uniforms
-        let voxel_uniforms = VoxelUniforms { brick_map_depth };
+        let voxel_uniforms = VoxelUniforms {
+            brickmap_depth: brickmap_depth,
+        };
         let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());
         uniform_buffer.write_buffer(render_device, render_queue);
 
+        // storage
+        let brickmap = vec![0; 4 * 8 * brickmap_max_nodes];
+        let brickmap = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            contents: &brickmap,
+            label: None,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::MAP_WRITE,
+        });
+
         // texture
+        let texture_size = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
+        let texture_data = vec![0; 4 * texture_size as usize];
         let bricks = render_device.create_texture_with_data(
             render_queue,
             &TextureDescriptor {
@@ -50,18 +75,11 @@ impl Plugin for VoxelWorldPlugin {
                 sample_count: 1,
                 dimension: TextureDimension::D3,
                 format: TextureFormat::Rgba8Unorm,
-                usage: TextureUsages::STORAGE_BINDING | TextureUsages::COPY_DST,
+                usage: TextureUsages::STORAGE_BINDING,
             },
-            &bricks,
+            &texture_data,
         );
-        let bricks = bricks.create_view(&TextureViewDescriptor::default());
-
-        // storage
-        let brickmap = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            contents: data,
-            label: None,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
+        let bricks_view = bricks.create_view(&TextureViewDescriptor::default());
 
         let bind_group_layout =
             render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -114,7 +132,7 @@ impl Plugin for VoxelWorldPlugin {
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: BindingResource::TextureView(&bricks),
+                    resource: BindingResource::TextureView(&bricks_view),
                 },
             ],
         });
@@ -124,10 +142,12 @@ impl Plugin for VoxelWorldPlugin {
             .insert_resource(VoxelData {
                 uniform_buffer,
                 bricks,
+                bricks_view,
                 brickmap,
                 bind_group_layout,
                 bind_group,
             })
+            .insert_resource(gpu_voxel_world)
             .add_system(prepare_uniforms.in_set(RenderSet::Prepare))
             .add_system(queue_bind_group.in_set(RenderSet::Queue));
     }
@@ -136,7 +156,8 @@ impl Plugin for VoxelWorldPlugin {
 #[derive(Resource)]
 pub struct VoxelData {
     pub uniform_buffer: UniformBuffer<VoxelUniforms>,
-    pub bricks: TextureView,
+    pub bricks: Texture,
+    pub bricks_view: TextureView,
     pub brickmap: Buffer,
     pub bind_group_layout: BindGroupLayout,
     pub bind_group: BindGroup,
@@ -144,7 +165,7 @@ pub struct VoxelData {
 
 #[derive(Resource, ExtractResource, Clone, ShaderType)]
 pub struct VoxelUniforms {
-    brick_map_depth: u32,
+    brickmap_depth: u32,
 }
 
 fn prepare_uniforms(
@@ -174,7 +195,7 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             },
             BindGroupEntry {
                 binding: 2,
-                resource: BindingResource::TextureView(&voxel_data.bricks),
+                resource: BindingResource::TextureView(&voxel_data.bricks_view),
             },
         ],
     });

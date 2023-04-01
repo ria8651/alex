@@ -1,5 +1,6 @@
 use self::{
     main_pass::{MainPassNode, MainPassPlugin},
+    voxel_streaming::VoxelStreamingPlugin,
     voxel_world::VoxelWorldPlugin,
 };
 use bevy::{
@@ -19,6 +20,7 @@ pub use main_pass::MainPassSettings;
 mod cpu_brickmap;
 mod load_anvil;
 mod main_pass;
+mod voxel_streaming;
 mod voxel_world;
 
 pub struct RenderPlugin;
@@ -27,6 +29,7 @@ impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(RenderGraphSettings::default())
             .add_plugin(ExtractResourcePlugin::<RenderGraphSettings>::default())
+            .add_plugin(VoxelStreamingPlugin)
             .add_plugin(VoxelWorldPlugin)
             .add_plugin(MainPassPlugin);
 

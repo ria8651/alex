@@ -5,7 +5,7 @@ use bevy::{prelude::*, utils::HashMap};
 use fastanvil::{Block, BlockData};
 use std::path::PathBuf;
 
-pub fn load_palette() -> HashMap<String, [u8; 4]> {
+fn load_palette() -> HashMap<String, [u8; 4]> {
     let file = std::fs::File::open("assets/palette/blockstates.json");
     let mut json: HashMap<String, [u8; 4]> = serde_json::from_reader(file.unwrap()).unwrap();
     json.insert("".to_string(), [200, 200, 200, 127]);
@@ -25,10 +25,10 @@ pub fn load_palette() -> HashMap<String, [u8; 4]> {
 
 pub fn load_anvil(
     region_path: PathBuf,
-    brick_map_depth: u32,
+    brickmap_depth: u32,
 ) -> CpuBrickmap {
-    let side_length_bricks = 1 << brick_map_depth;
-    let mut brick_map = CpuBrickmap::new(brick_map_depth);
+    let side_length_bricks = 1 << brickmap_depth;
+    let mut brickmap = CpuBrickmap::new(brickmap_depth);
 
     // load mc palette
     let palette = load_palette();
@@ -38,31 +38,31 @@ pub fn load_anvil(
         let mut node_pos = IVec3::new(0, 0, 0);
         let mut node_depth = 1;
         loop {
-            let offset = IVec3::splat(1 << (brick_map_depth - node_depth));
+            let offset = IVec3::splat(1 << (brickmap_depth - node_depth));
             let mask = pos.cmpge(node_pos + offset);
             node_pos = node_pos + IVec3::select(mask, offset, IVec3::ZERO);
 
             let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
             let index = node_index + child_index;
 
-            let mut new_node = brick_map.brick_map[index] as usize & 0xFFFF;
-            if (new_node & 0xFFFF) == 0 {
-                if node_depth == brick_map_depth {
+            let mut new_node = 8 * (brickmap.brickmap[index] & 0xFFFF) as usize;
+            if new_node == 0 {
+                if node_depth == brickmap_depth {
                     // place in data
                     let brick = Brick::from_block_data(block_data, &palette);
-                    let brick_index = brick_map.bricks.len() as u32;
-                    brick_map.brick_map[index] = brick_index << 16;
-                    brick_map.bricks.push(brick);
+                    let brick_index = brickmap.bricks.len() as u32;
+                    brickmap.brickmap[index] = brick_index << 16;
+                    brickmap.bricks.push(brick);
 
                     return Ok(());
                 } else {
                     // subdivide node and continue
-                    let new_children_index = brick_map.brick_map.len() as u32;
-                    let brick_index = brick_map.bricks.len() as u32;
-                    brick_map.brick_map[index] = new_children_index | (brick_index << 16);
+                    let new_children_index = brickmap.brickmap.len() as u32;
+                    let brick_index = brickmap.bricks.len() as u32;
+                    brickmap.brickmap[index] = (new_children_index / 8) | (brick_index << 16);
 
-                    brick_map.brick_map.extend(vec![0; 8]);
-                    brick_map.bricks.push(Brick::empty());
+                    brickmap.brickmap.extend(vec![0; 8]);
+                    brickmap.bricks.push(Brick::empty());
 
                     new_node = new_children_index as usize;
                 }
@@ -80,8 +80,8 @@ pub fn load_anvil(
     let side_length_regions = (side_length_bricks / 32).max(1);
     let half_side_length_regions = side_length_regions / 2;
     'outer: for region_x in -half_side_length_regions..half_side_length_regions.max(1) {
-        for region_y in -half_side_length_regions..half_side_length_regions.max(1) {
-            let path = region_path.join(format!("r.{}.{}.mca", region_x, region_y));
+        for region_z in -half_side_length_regions..half_side_length_regions.max(1) {
+            let path = region_path.join(format!("r.{}.{}.mca", region_x, region_z));
             info!("loading region {}", path.display());
             if let Ok(file) = std::fs::File::open(path) {
                 let mut region = Region::from_stream(file).unwrap();
@@ -104,7 +104,7 @@ pub fn load_anvil(
                                 let pos = IVec3::new(
                                     32 * (region_x + half_side_length_regions) + chunk_x as i32,
                                     section.y as i32 + side_length_bricks / 2,
-                                    32 * (region_y + half_side_length_regions) + chunk_z as i32,
+                                    32 * (region_z + half_side_length_regions) + chunk_z as i32,
                                 );
                                 match place_section(block_data, pos) {
                                     Ok(_) => {}
@@ -132,5 +132,5 @@ pub fn load_anvil(
     // )
     // .unwrap();
 
-    brick_map
+    brickmap
 }

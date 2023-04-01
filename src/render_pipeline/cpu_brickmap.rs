@@ -6,23 +6,24 @@ pub struct Brick {
 }
 
 pub struct CpuBrickmap {
-    pub brick_map: Vec<u32>,
-    pub brick_map_depth: u32,
+    pub brickmap: Vec<u32>,
+    pub brickmap_depth: u32,
     pub bricks: Vec<Brick>,
 }
 
 impl CpuBrickmap {
-    pub fn new(brick_map_depth: u32) -> Self {
+    pub fn new(brickmap_depth: u32) -> Self {
         Self {
-            brick_map: vec![0; 8],
-            brick_map_depth,
+            brickmap: vec![0; 8],
+            brickmap_depth,
             bricks: vec![Brick::empty()],
         }
     }
 
-    // returns the brick_map and gpu bricks texture
+    // returns the brickmap and gpu bricks texture
+    #[allow(dead_code)]
     pub fn to_gpu(&self, brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
-        let brick_map = self.brick_map.clone();
+        let brickmap = self.brickmap.clone();
         let texture_length = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
         let mut bricks = vec![0; 4 * texture_length as usize];
 
@@ -58,29 +59,29 @@ impl CpuBrickmap {
             }
         }
 
-        (brick_map, bricks)
+        (brickmap, bricks)
     }
 
     pub fn recreate_mipmaps(&mut self) {
         info!("recreating mipmaps for {} bricks", self.bricks.len());
 
         // mip-mapping
-        fn recursive_mip(mut brick_map: &mut CpuBrickmap, node_index: usize, depth: u32) {
-            let children_index = brick_map.brick_map[node_index] as usize & 0xFFFF;
+        fn recursive_mip(mut brickmap: &mut CpuBrickmap, node_index: usize, depth: u32) {
+            let children_index = brickmap.brickmap[node_index] as usize & 0xFFFF;
             if children_index == 0 {
                 return;
             }
-            if depth < brick_map.brick_map_depth - 1 {
+            if depth < brickmap.brickmap_depth - 1 {
                 for i in 0..8 {
-                    recursive_mip(&mut brick_map, children_index + i, depth + 1);
+                    recursive_mip(&mut brickmap, children_index + i, depth + 1);
                 }
             }
 
             // mip the brick
-            let brick_index = brick_map.brick_map[node_index] >> 16;
+            let brick_index = brickmap.brickmap[node_index] >> 16;
 
             #[cfg(debug_assertions)]
-            if brick_index as usize >= brick_map.bricks.len() {
+            if brick_index as usize >= brickmap.bricks.len() {
                 error!("brick index out of bounds");
             }
             #[cfg(debug_assertions)]
@@ -101,18 +102,18 @@ impl CpuBrickmap {
                             + mask.x as usize * 4
                             + mask.y as usize * 2
                             + mask.z as usize;
-                        let child_brick_index = brick_map.brick_map[child_node_index] >> 16;
+                        let child_brick_index = brickmap.brickmap[child_node_index] >> 16;
                         if child_brick_index as usize == 0 {
                             continue;
                         }
                         #[cfg(debug_assertions)]
-                        if child_brick_index as usize >= brick_map.bricks.len() {
+                        if child_brick_index as usize >= brickmap.bricks.len() {
                             error!("child brick index out of bounds");
                         }
                         for j in 0..8 {
                             let child_pos_in_brick =
                                 2 * (pos % 8) + UVec3::new(j & 1, j >> 1 & 1, j >> 2 & 1);
-                            let child_colour = brick_map.bricks[child_brick_index as usize]
+                            let child_colour = brickmap.bricks[child_brick_index as usize]
                                 .get(child_pos_in_brick);
 
                             let alpha = child_colour[3] as f32;
@@ -135,7 +136,7 @@ impl CpuBrickmap {
                             colour.z as u8,
                             total_alpha as u8,
                         ];
-                        brick_map.bricks[brick_index as usize].write(pos, new_colour);
+                        brickmap.bricks[brick_index as usize].write(pos, new_colour);
                     }
                 }
             }

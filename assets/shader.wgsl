@@ -68,7 +68,7 @@ struct Brick {
 
 fn find_brick(pos: vec3<i32>) -> Brick {
     if (uniforms.show_brick_texture == 0u) {
-        var node_index = 0;
+        var node_index = 0u;
         var node_pos = vec3(0);
         var depth = 1u;
         loop {
@@ -77,14 +77,14 @@ fn find_brick(pos: vec3<i32>) -> Brick {
             node_pos += mask * offset;
 
             let child_index = mask.x * 4 + mask.y * 2 + mask.z;
-            let new_node_index = node_index + child_index;
+            let new_node_index = node_index + u32(child_index);
             let new_node = brickmap[new_node_index];
             if ((new_node & 0xFFFFu) == 0u || depth >= u32(f32(voxel_uniforms.brick_map_depth) * uniforms.misc_float)) {
                 return Brick(new_node >> 16u, node_pos, depth);
             }
 
             depth = depth + 1u;
-            node_index = i32(new_node & 0xFFFFu);
+            node_index = 8u * (new_node & 0xFFFFu);
         }
 
         return Brick(0u, vec3(0), 0u);

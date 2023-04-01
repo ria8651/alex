@@ -7,7 +7,7 @@ use bevy::{
 };
 use bevy_egui::{
     egui::{self, Slider},
-    EguiContext, EguiPlugin,
+    EguiContexts, EguiPlugin,
 };
 
 pub struct UiPlugin;
@@ -21,7 +21,7 @@ impl Plugin for UiPlugin {
 }
 
 fn ui_system(
-    mut egui_context: ResMut<EguiContext>,
+    mut contexts: EguiContexts,
     mut camera_settings_query: Query<(
         &mut MainPassSettings,
         Option<&mut BloomSettings>,
@@ -37,7 +37,7 @@ fn ui_system(
 
     egui::Window::new("Settings")
         .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
-        .show(egui_context.ctx_for_window_mut(window.single()), |ui| {
+        .show(contexts.ctx_for_window_mut(window.single()), |ui| {
             if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
                 if let Some(average) = fps.average() {
                     ui.label(format!("FPS: {:.0}", average));

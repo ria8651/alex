@@ -4,7 +4,7 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 
-const SPEED: f32 = 20.0;
+const SPEED: f32 = 10.0;
 const SENSITIVITY: f32 = 0.004;
 
 #[derive(Component)]

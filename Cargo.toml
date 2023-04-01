@@ -7,7 +7,8 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.10"
-bevy_egui = { git = "https://github.com/mvlabat/bevy_egui", branch = "bevy-0.10" }
+bevy_egui = "0.20"
 fastanvil = "0.26.1"
 fastnbt = "2.4.2"
 serde_json = "1.0.93"
+wgpu = "0.15.0"
