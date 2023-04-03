@@ -11,6 +11,7 @@ pub struct CpuBrickmap {
     pub bricks: Vec<Brick>,
 }
 
+#[allow(dead_code)]
 impl CpuBrickmap {
     pub fn new(brickmap_depth: u32) -> Self {
         Self {
@@ -20,8 +21,74 @@ impl CpuBrickmap {
         }
     }
 
+    pub fn place_brick(
+        &mut self,
+        block_data: &BlockData<Block>,
+        pos: UVec3,
+        palette: &HashMap<String, [u8; 4]>,
+    ) -> Result<(), String> {
+        let mut node_index = 0;
+        let mut node_pos = UVec3::new(0, 0, 0);
+        let mut node_depth = 1;
+        loop {
+            let offset = UVec3::splat(1 << (self.brickmap_depth - node_depth));
+            let mask = pos.cmpge(node_pos + offset);
+            node_pos = node_pos + UVec3::select(mask, offset, UVec3::ZERO);
+
+            let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
+            let index = node_index + child_index;
+
+            let mut new_node = 8 * (self.brickmap[index] & 0xFFFF) as usize;
+            if new_node == 0 {
+                if node_depth == self.brickmap_depth {
+                    // place in data
+                    let brick = Brick::from_block_data(block_data, &palette);
+                    let brick_index = self.bricks.len() as u32;
+                    self.brickmap[index] = brick_index << 16;
+                    self.bricks.push(brick);
+
+                    return Ok(());
+                } else {
+                    // subdivide node and continue
+                    let new_children_index = self.brickmap.len() as u32;
+                    let brick_index = self.bricks.len() as u32;
+                    self.brickmap[index] = (new_children_index / 8) | (brick_index << 16);
+
+                    self.brickmap.extend(vec![0; 8]);
+                    self.bricks.push(Brick::empty());
+
+                    new_node = new_children_index as usize;
+                }
+            }
+
+            node_depth += 1;
+            node_index = new_node;
+        }
+    }
+
+    pub fn get_node(&self, pos: UVec3, max_depth: Option<u32>) -> (usize, UVec3, u32) {
+        let mut node_index = 0;
+        let mut node_pos = UVec3::new(0, 0, 0);
+        let mut node_depth = 1;
+        loop {
+            let offset = UVec3::splat(1 << (self.brickmap_depth - node_depth));
+            let mask = pos.cmpge(node_pos + offset);
+            node_pos = node_pos + UVec3::select(mask, offset, UVec3::ZERO);
+
+            let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
+            let index = node_index + child_index;
+
+            let new_node = 8 * (self.brickmap[index] & 0xFFFF) as usize;
+            if new_node == 0 || node_depth >= max_depth.unwrap_or(u32::MAX) {
+                return (index, node_pos, node_depth);
+            }
+
+            node_depth += 1;
+            node_index = new_node;
+        }
+    }
+
     // returns the brickmap and gpu bricks texture
-    #[allow(dead_code)]
     pub fn to_gpu(&self, brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
         let brickmap = self.brickmap.clone();
         let texture_length = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
@@ -67,7 +134,7 @@ impl CpuBrickmap {
 
         // mip-mapping
         fn recursive_mip(mut brickmap: &mut CpuBrickmap, node_index: usize, depth: u32) {
-            let children_index = brickmap.brickmap[node_index] as usize & 0xFFFF;
+            let children_index = 8 * (brickmap.brickmap[node_index] as usize & 0xFFFF);
             if children_index == 0 {
                 return;
             }
@@ -113,8 +180,8 @@ impl CpuBrickmap {
                         for j in 0..8 {
                             let child_pos_in_brick =
                                 2 * (pos % 8) + UVec3::new(j & 1, j >> 1 & 1, j >> 2 & 1);
-                            let child_colour = brickmap.bricks[child_brick_index as usize]
-                                .get(child_pos_in_brick);
+                            let child_colour =
+                                brickmap.bricks[child_brick_index as usize].get(child_pos_in_brick);
 
                             let alpha = child_colour[3] as f32;
                             let child_colour = Vec3::new(
@@ -148,6 +215,7 @@ impl CpuBrickmap {
     }
 }
 
+#[allow(dead_code)]
 impl Brick {
     pub fn empty() -> Self {
         Self {
@@ -198,5 +266,16 @@ impl Brick {
             }
         }
         brick
+    }
+
+    #[allow(unused_variables)]
+    pub fn to_gpu(&self) -> &[u8] {
+        let (head, data, tail) = unsafe { self.data.align_to::<u8>() };
+        #[cfg(debug_assertions)]
+        {
+            assert!(head.is_empty());
+            assert!(tail.is_empty());
+        }
+        data
     }
 }

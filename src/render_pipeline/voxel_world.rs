@@ -17,6 +17,7 @@ pub struct CpuVoxelWorld(CpuBrickmap);
 pub struct GpuVoxelWorld {
     pub brickmap_holes: VecDeque<usize>,
     pub brick_holes: VecDeque<usize>,
+    pub brick_texture_size: UVec3,
 }
 
 pub struct VoxelWorldPlugin;
@@ -32,16 +33,22 @@ impl Plugin for VoxelWorldPlugin {
         let brickmap_max_nodes = 1 << 12;
 
         // load world (slooowwww)
-        let path = PathBuf::from("assets/worlds/hermitcraft7");
-        let mut brickmap = load_anvil(path, brickmap_depth);
-        brickmap.recreate_mipmaps();
+        let path = PathBuf::from("assets/worlds/anvil_test");
+        let mut cpu_brickmap = load_anvil(path, brickmap_depth);
+        cpu_brickmap.recreate_mipmaps();
 
         let dim = brick_texture_size / 16;
         let brick_count = (dim.x * dim.y * dim.z) as usize;
         let gpu_voxel_world = GpuVoxelWorld {
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
             brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
+            brick_texture_size,
         };
+
+        // let (brickmap, bricks) = cpu_brickmap.to_gpu(brick_texture_size);
+        // let (head, brickmap, tail) = unsafe { brickmap.align_to::<u8>() };
+        // assert!(head.is_empty());
+        // assert!(tail.is_empty());
 
         // uniforms
         let voxel_uniforms = VoxelUniforms {
@@ -60,7 +67,7 @@ impl Plugin for VoxelWorldPlugin {
 
         // texture
         let texture_size = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
-        let texture_data = vec![0; 4 * texture_size as usize];
+        let bricks = vec![0; 4 * texture_size as usize];
         let bricks = render_device.create_texture_with_data(
             render_queue,
             &TextureDescriptor {
@@ -77,7 +84,7 @@ impl Plugin for VoxelWorldPlugin {
                 format: TextureFormat::Rgba8Unorm,
                 usage: TextureUsages::STORAGE_BINDING,
             },
-            &texture_data,
+            &bricks,
         );
         let bricks_view = bricks.create_view(&TextureViewDescriptor::default());
 
@@ -147,6 +154,7 @@ impl Plugin for VoxelWorldPlugin {
                 bind_group_layout,
                 bind_group,
             })
+            .insert_resource(CpuVoxelWorld(cpu_brickmap))
             .insert_resource(gpu_voxel_world)
             .add_system(prepare_uniforms.in_set(RenderSet::Prepare))
             .add_system(queue_bind_group.in_set(RenderSet::Queue));

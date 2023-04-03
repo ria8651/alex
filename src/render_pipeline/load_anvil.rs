@@ -1,8 +1,5 @@
-use crate::render_pipeline::cpu_brickmap::Brick;
-
 use super::cpu_brickmap::CpuBrickmap;
 use bevy::{prelude::*, utils::HashMap};
-use fastanvil::{Block, BlockData};
 use std::path::PathBuf;
 
 fn load_palette() -> HashMap<String, [u8; 4]> {
@@ -23,62 +20,19 @@ fn load_palette() -> HashMap<String, [u8; 4]> {
     json
 }
 
-pub fn load_anvil(
-    region_path: PathBuf,
-    brickmap_depth: u32,
-) -> CpuBrickmap {
+pub fn load_anvil(region_path: PathBuf, brickmap_depth: u32) -> CpuBrickmap {
     let side_length_bricks = 1 << brickmap_depth;
     let mut brickmap = CpuBrickmap::new(brickmap_depth);
 
     // load mc palette
     let palette = load_palette();
 
-    let mut place_section = |block_data: &BlockData<Block>, pos: IVec3| -> Result<(), String> {
-        let mut node_index = 0;
-        let mut node_pos = IVec3::new(0, 0, 0);
-        let mut node_depth = 1;
-        loop {
-            let offset = IVec3::splat(1 << (brickmap_depth - node_depth));
-            let mask = pos.cmpge(node_pos + offset);
-            node_pos = node_pos + IVec3::select(mask, offset, IVec3::ZERO);
-
-            let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
-            let index = node_index + child_index;
-
-            let mut new_node = 8 * (brickmap.brickmap[index] & 0xFFFF) as usize;
-            if new_node == 0 {
-                if node_depth == brickmap_depth {
-                    // place in data
-                    let brick = Brick::from_block_data(block_data, &palette);
-                    let brick_index = brickmap.bricks.len() as u32;
-                    brickmap.brickmap[index] = brick_index << 16;
-                    brickmap.bricks.push(brick);
-
-                    return Ok(());
-                } else {
-                    // subdivide node and continue
-                    let new_children_index = brickmap.brickmap.len() as u32;
-                    let brick_index = brickmap.bricks.len() as u32;
-                    brickmap.brickmap[index] = (new_children_index / 8) | (brick_index << 16);
-
-                    brickmap.brickmap.extend(vec![0; 8]);
-                    brickmap.bricks.push(Brick::empty());
-
-                    new_node = new_children_index as usize;
-                }
-            }
-
-            node_depth += 1;
-            node_index = new_node;
-        }
-    };
-
     // load chunks into the texture
     use fastanvil::{CurrentJavaChunk, Region};
     use fastnbt::from_bytes;
 
     let side_length_regions = (side_length_bricks / 32).max(1);
-    let half_side_length_regions = side_length_regions / 2;
+    let half_side_length_regions: i32 = side_length_regions / 2;
     'outer: for region_x in -half_side_length_regions..half_side_length_regions.max(1) {
         for region_z in -half_side_length_regions..half_side_length_regions.max(1) {
             let path = region_path.join(format!("r.{}.{}.mca", region_x, region_z));
@@ -101,12 +55,12 @@ pub fn load_anvil(
                                 }
 
                                 let block_data = &section.block_states;
-                                let pos = IVec3::new(
-                                    32 * (region_x + half_side_length_regions) + chunk_x as i32,
-                                    section.y as i32 + side_length_bricks / 2,
-                                    32 * (region_z + half_side_length_regions) + chunk_z as i32,
+                                let pos = UVec3::new(
+                                    32 * (region_x + half_side_length_regions) as u32 + chunk_x as u32,
+                                    (section.y as i32 + side_length_bricks / 2) as u32,
+                                    32 * (region_z + half_side_length_regions) as u32 + chunk_z as u32,
                                 );
-                                match place_section(block_data, pos) {
+                                match brickmap.place_brick(block_data, pos, &palette) {
                                     Ok(_) => {}
                                     Err(e) => {
                                         println!("{}", e);
