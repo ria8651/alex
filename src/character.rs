@@ -1,19 +1,32 @@
 use bevy::{
-    input::mouse::MouseMotion,
+    input::mouse::{MouseMotion, MouseWheel},
     prelude::*,
     window::{CursorGrabMode, PrimaryWindow},
 };
 
-const SPEED: f32 = 10.0;
 const SENSITIVITY: f32 = 0.004;
 
 #[derive(Component)]
 pub struct CharacterEntity {
+    pub speed: f32,
     pub velocity: Vec3,
     pub in_spectator: bool,
     pub grounded: bool,
     pub look_at: Vec3,
     pub up: Vec3,
+}
+
+impl Default for CharacterEntity {
+    fn default() -> Self {
+        Self {
+            speed: 10.0,
+            velocity: Vec3::ZERO,
+            in_spectator: true,
+            grounded: false,
+            look_at: Vec3::Z,
+            up: Vec3::Y,
+        }
+    }
 }
 
 pub struct CharacterPlugin;
@@ -45,6 +58,7 @@ fn update_character(
     mut mouse_motion_events: EventReader<MouseMotion>,
     time: Res<Time>,
     mut primary_query: Query<&mut Window, With<PrimaryWindow>>,
+    mut mouse_wheel_events: EventReader<MouseWheel>,
 ) {
     let mut window = primary_query.single_mut();
     if keys.just_pressed(KeyCode::Escape) {
@@ -54,6 +68,11 @@ fn update_character(
     let (mut transform, mut character) = character.single_mut();
     let target_velocity;
     if window.cursor.grab_mode == CursorGrabMode::Locked {
+        // speed
+        for event in mouse_wheel_events.iter() {
+            character.speed *= 1.0 + event.y.min(50.0) * 0.001;
+        }
+
         // rotation
         let mut mouse_delta = Vec2::new(0.0, 0.0);
         for event in mouse_motion_events.iter() {
@@ -86,7 +105,7 @@ fn update_character(
         if input != Vec3::ZERO {
             input = input.normalize();
         }
-        input *= SPEED;
+        input *= character.speed;
 
         // if character.in_spectator {
         target_velocity = input.z * transform.local_z()

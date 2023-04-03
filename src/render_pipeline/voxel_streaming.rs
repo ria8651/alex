@@ -69,7 +69,7 @@ fn voxel_streaming_system(
             if ratio > streaming_ratio + streaming_range {
                 let (cpu_node_index, _, _) = cpu_voxel_world.get_node(pos, Some(depth));
                 let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
-                if cpu_node & 0xFFFF != 0 {
+                if cpu_node.children != 0 {
                     nodes_to_divide.push((node_index, pos, depth));
                 }
             }
@@ -134,7 +134,7 @@ fn voxel_streaming_system(
             warn!("tried to divide node that doesn't exist on cpu");
             return;
         }
-        if cpu_node & 0xFFFF == 0 {
+        if cpu_node.children == 0 {
             warn!("tried to divide node with no children on cpu");
             return;
         }
@@ -148,8 +148,8 @@ fn voxel_streaming_system(
         for i in 0..8 {
             brickmap[hole.unwrap() * 8 + i] = 0;
 
-            let cpu_child_node = cpu_voxel_world.brickmap[8 * (cpu_node & 0xFFFF) as usize + i];
-            let cpu_child_brick_index = cpu_child_node >> 16;
+            let cpu_child_node = cpu_voxel_world.brickmap[8 * cpu_node.children as usize + i];
+            let cpu_child_brick_index = cpu_child_node.brick;
             if cpu_child_brick_index != 0 {
                 let brick_index = gpu_voxel_world.brick_holes.pop_front();
                 if brick_index.is_none() {

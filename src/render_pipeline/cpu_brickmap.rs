@@ -5,8 +5,21 @@ pub struct Brick {
     data: [[u8; 4]; 16 * 16 * 16],
 }
 
+#[derive(Copy, Clone)]
+pub struct Node {
+    pub children: u32,
+    pub brick: u32,
+}
+
+impl Node {
+    const ZERO: Self = Self {
+        children: 0,
+        brick: 0,
+    };
+}
+
 pub struct CpuBrickmap {
-    pub brickmap: Vec<u32>,
+    pub brickmap: Vec<Node>,
     pub brickmap_depth: u32,
     pub bricks: Vec<Brick>,
 }
@@ -15,7 +28,7 @@ pub struct CpuBrickmap {
 impl CpuBrickmap {
     pub fn new(brickmap_depth: u32) -> Self {
         Self {
-            brickmap: vec![0; 8],
+            brickmap: vec![Node::ZERO; 8],
             brickmap_depth,
             bricks: vec![Brick::empty()],
         }
@@ -38,13 +51,13 @@ impl CpuBrickmap {
             let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
             let index = node_index + child_index;
 
-            let mut new_node = 8 * (self.brickmap[index] & 0xFFFF) as usize;
+            let mut new_node = 8 * self.brickmap[index].children as usize;
             if new_node == 0 {
                 if node_depth == self.brickmap_depth {
                     // place in data
                     let brick = Brick::from_block_data(block_data, &palette);
                     let brick_index = self.bricks.len() as u32;
-                    self.brickmap[index] = brick_index << 16;
+                    self.brickmap[index].brick = brick_index;
                     self.bricks.push(brick);
 
                     return Ok(());
@@ -52,9 +65,12 @@ impl CpuBrickmap {
                     // subdivide node and continue
                     let new_children_index = self.brickmap.len() as u32;
                     let brick_index = self.bricks.len() as u32;
-                    self.brickmap[index] = (new_children_index / 8) | (brick_index << 16);
+                    self.brickmap[index] = Node {
+                        children: new_children_index / 8,
+                        brick: brick_index,
+                    };
 
-                    self.brickmap.extend(vec![0; 8]);
+                    self.brickmap.extend(vec![Node::ZERO; 8]);
                     self.bricks.push(Brick::empty());
 
                     new_node = new_children_index as usize;
@@ -78,7 +94,7 @@ impl CpuBrickmap {
             let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
             let index = node_index + child_index;
 
-            let new_node = 8 * (self.brickmap[index] & 0xFFFF) as usize;
+            let new_node = 8 * self.brickmap[index].children as usize;
             if new_node == 0 || node_depth >= max_depth.unwrap_or(u32::MAX) {
                 return (index, node_pos, node_depth);
             }
@@ -90,7 +106,11 @@ impl CpuBrickmap {
 
     // returns the brickmap and gpu bricks texture
     pub fn to_gpu(&self, brick_texture_size: UVec3) -> (Vec<u32>, Vec<u8>) {
-        let brickmap = self.brickmap.clone();
+        let mut brickmap = vec![0; self.brickmap.len()];
+        for (i, node) in self.brickmap.iter().enumerate() {
+            brickmap[i] = node.children | node.brick << 16;
+        }
+
         let texture_length = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
         let mut bricks = vec![0; 4 * texture_length as usize];
 
@@ -134,7 +154,7 @@ impl CpuBrickmap {
 
         // mip-mapping
         fn recursive_mip(mut brickmap: &mut CpuBrickmap, node_index: usize, depth: u32) {
-            let children_index = 8 * (brickmap.brickmap[node_index] as usize & 0xFFFF);
+            let children_index = 8 * brickmap.brickmap[node_index].children as usize;
             if children_index == 0 {
                 return;
             }
@@ -145,7 +165,7 @@ impl CpuBrickmap {
             }
 
             // mip the brick
-            let brick_index = brickmap.brickmap[node_index] >> 16;
+            let brick_index = brickmap.brickmap[node_index].brick;
 
             #[cfg(debug_assertions)]
             if brick_index as usize >= brickmap.bricks.len() {
@@ -169,7 +189,7 @@ impl CpuBrickmap {
                             + mask.x as usize * 4
                             + mask.y as usize * 2
                             + mask.z as usize;
-                        let child_brick_index = brickmap.brickmap[child_node_index] >> 16;
+                        let child_brick_index = brickmap.brickmap[child_node_index].brick;
                         if child_brick_index as usize == 0 {
                             continue;
                         }

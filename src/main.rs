@@ -40,11 +40,8 @@ fn setup(mut commands: Commands) {
         },
         MainPassSettings { ..default() },
         CharacterEntity {
-            velocity: Vec3::ZERO,
-            grounded: false,
-            in_spectator: true,
             look_at: -character_transform.local_z(),
-            up: Vec3::Y,
+            ..default()
         },
     ));
 }
