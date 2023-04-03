@@ -58,6 +58,14 @@ fn ui_system(
                             Slider::new(&mut trace_settings.alpha_cutoff, 0.0..=1.0)
                                 .text("Alpha cutoff"),
                         );
+                        ui.add(
+                            Slider::new(&mut trace_settings.streaming_ratio, 0.0..=1.0)
+                                .text("Streaming ratio"),
+                        );
+                        ui.add(
+                            Slider::new(&mut trace_settings.streaming_range, 0.0..=1.0)
+                                .text("Streaming range"),
+                        );
                         ui.checkbox(&mut trace_settings.misc_bool, "Misc");
                         ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
                         if let Some(mut tonemapping) = tonemapping {

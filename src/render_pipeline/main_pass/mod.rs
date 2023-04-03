@@ -40,6 +40,8 @@ pub struct MainPassSettings {
     pub shadows: bool,
     pub show_brick_texture: bool,
     pub alpha_cutoff: f32,
+    pub streaming_ratio: f32,
+    pub streaming_range: f32,
     pub misc_bool: bool,
     pub misc_float: f32,
 }
@@ -52,6 +54,8 @@ impl Default for MainPassSettings {
             shadows: true,
             show_brick_texture: false,
             alpha_cutoff: 0.0,
+            streaming_ratio: 0.1,
+            streaming_range: 0.0,
             misc_bool: false,
             misc_float: 1.0,
         }

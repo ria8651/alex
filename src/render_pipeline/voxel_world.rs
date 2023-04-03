@@ -33,7 +33,7 @@ impl Plugin for VoxelWorldPlugin {
         let brickmap_max_nodes = 1 << 12;
 
         // load world (slooowwww)
-        let path = PathBuf::from("assets/worlds/anvil_test");
+        let path = PathBuf::from("assets/worlds/hermitcraft7");
         let mut cpu_brickmap = load_anvil(path, brickmap_depth);
         cpu_brickmap.recreate_mipmaps();
 
