@@ -4,11 +4,7 @@ use super::{
 };
 use bevy::{
     prelude::*,
-    render::{
-        renderer::{RenderDevice, RenderQueue},
-        view::ExtractedView,
-        RenderApp, RenderSet,
-    },
+    render::{renderer::RenderQueue, view::ExtractedView, RenderApp, RenderSet},
 };
 use std::num::NonZeroU32;
 use wgpu::ImageCopyTexture;
@@ -24,7 +20,6 @@ impl Plugin for VoxelStreamingPlugin {
 
 fn voxel_streaming_system(
     voxel_data: Res<VoxelData>,
-    render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     cpu_voxel_world: Res<CpuVoxelWorld>,
     mut gpu_voxel_world: ResMut<GpuVoxelWorld>,
@@ -33,18 +28,6 @@ fn voxel_streaming_system(
     let (cam_pos, main_pass_settings) = character.single();
     let streaming_pos =
         cam_pos.transform.translation() + (1 << cpu_voxel_world.brickmap_depth - 1) as f32;
-
-    // load up the brickmap for editing
-    let span = info_span!("waiting for gpu", name = "waiting for gpu").entered();
-    let brickmap_slice = voxel_data.brickmap.slice(..);
-    brickmap_slice.map_async(wgpu::MapMode::Write, |_| {});
-    render_device.poll(wgpu::Maintain::Wait);
-    drop(span);
-
-    let mut data = brickmap_slice.get_mapped_range_mut();
-    let (head, brickmap, tail) = unsafe { data.align_to_mut::<u32>() };
-    assert!(head.is_empty());
-    assert!(tail.is_empty());
 
     // find the nodes that need updating
     fn recursive_search(
@@ -106,7 +89,7 @@ fn voxel_streaming_system(
         let pos =
             UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * (1 << cpu_voxel_world.brickmap_depth - 1);
         recursive_search(
-            brickmap,
+            &mut gpu_voxel_world.brickmap,
             &cpu_voxel_world,
             i as usize,
             pos,
@@ -122,7 +105,7 @@ fn voxel_streaming_system(
 
     // subdivision
     let mut divide_node = |index: usize, pos: UVec3, depth: u32| {
-        let node = brickmap[index];
+        let node = gpu_voxel_world.brickmap[index];
         if node & 0xFFFF != 0 {
             warn!("node {} already divided", index);
             return;
@@ -146,7 +129,7 @@ fn voxel_streaming_system(
         }
 
         for i in 0..8 {
-            brickmap[hole.unwrap() * 8 + i] = 0;
+            gpu_voxel_world.brickmap[hole.unwrap() * 8 + i] = 0;
 
             let cpu_child_node = cpu_voxel_world.brickmap[8 * cpu_node.children as usize + i];
             let cpu_child_brick_index = cpu_child_node.brick;
@@ -189,11 +172,12 @@ fn voxel_streaming_system(
                     },
                 );
 
-                brickmap[hole.unwrap() * 8 + i] |= (brick_index.unwrap() as u32) << 16;
+                gpu_voxel_world.brickmap[hole.unwrap() * 8 + i] |=
+                    (brick_index.unwrap() as u32) << 16;
             }
         }
 
-        brickmap[index] |= hole.unwrap() as u32;
+        gpu_voxel_world.brickmap[index] |= hole.unwrap() as u32;
     };
 
     for (index, pos, depth) in nodes_to_divide {
@@ -201,8 +185,8 @@ fn voxel_streaming_system(
     }
 
     // culling
-    fn cull_node(index: usize, brickmap: &mut [u32], gpu_voxel_world: &mut GpuVoxelWorld) {
-        let node = brickmap[index];
+    fn cull_node(index: usize, gpu_voxel_world: &mut GpuVoxelWorld) {
+        let node = gpu_voxel_world.brickmap[index];
         if node & 0xFFFF == 0 {
             warn!("node {} already culled", index);
             return;
@@ -210,7 +194,7 @@ fn voxel_streaming_system(
 
         let children_index = 8 * (node & 0xFFFF) as usize;
         for i in 0..8 {
-            let child_node = brickmap[children_index + i];
+            let child_node = gpu_voxel_world.brickmap[children_index + i];
             let child_node_brick_index = child_node >> 16;
             if child_node_brick_index != 0 {
                 gpu_voxel_world
@@ -219,24 +203,21 @@ fn voxel_streaming_system(
             }
             let child_node_children_index = 8 * (child_node & 0xFFFF) as usize;
             if child_node_children_index != 0 {
-                cull_node(child_node_children_index, brickmap, gpu_voxel_world);
+                cull_node(child_node_children_index, gpu_voxel_world);
             }
         }
 
-        brickmap[index] &= 0xFFFF0000;
+        gpu_voxel_world.brickmap[index] &= 0xFFFF0000;
         gpu_voxel_world.brickmap_holes.push_back(children_index / 8);
     }
 
     for node_index in nodes_to_cull {
-        cull_node(node_index, brickmap, &mut gpu_voxel_world);
+        cull_node(node_index, &mut gpu_voxel_world);
     }
+
+    let (_, data, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
+    render_queue.write_buffer(&voxel_data.brickmap, 0, data);
 
     // println!("brickmap holes: {:?}", gpu_voxel_world.brickmap_holes.len());
     // println!("brick holes: {:?}", gpu_voxel_world.brick_holes.len());
-
-    // let (index, pos, depth) = nodes_to_divide[0];
-    // divide_node(index, pos, depth);
-
-    drop(data);
-    voxel_data.brickmap.unmap();
 }
