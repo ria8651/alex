@@ -70,7 +70,7 @@ fn update_character(
     if window.cursor.grab_mode == CursorGrabMode::Locked {
         // speed
         for event in mouse_wheel_events.iter() {
-            character.speed *= 1.0 + event.y.min(50.0) * 0.001;
+            character.speed *= 1.0 + event.y.min(50.0) / 100.0;
         }
 
         // rotation

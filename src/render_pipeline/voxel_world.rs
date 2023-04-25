@@ -29,8 +29,8 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let brickmap_depth = 5;
-        let brick_texture_size = UVec3::splat(512);
+        let brickmap_depth = 6;
+        let brick_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 12;
 
         // load world (slooowwww)

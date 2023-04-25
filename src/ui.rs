@@ -9,6 +9,7 @@ use bevy_egui::{
     egui::{self, Slider},
     EguiContexts, EguiPlugin,
 };
+use std::collections::VecDeque;
 
 pub struct UiPlugin;
 
@@ -16,9 +17,13 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(EguiPlugin)
             .add_plugin(FrameTimeDiagnosticsPlugin::default())
+            .insert_resource(FpsData(VecDeque::new()))
             .add_system(ui_system);
     }
 }
+
+#[derive(Resource, Deref, DerefMut)]
+struct FpsData(VecDeque<f64>);
 
 fn ui_system(
     mut contexts: EguiContexts,
@@ -32,6 +37,7 @@ fn ui_system(
     window: Query<Entity, With<PrimaryWindow>>,
     diagnostics: Res<Diagnostics>,
     mut character: Query<&mut Transform, With<CharacterEntity>>,
+    mut fps_data: ResMut<FpsData>,
 ) {
     let mut character = character.single_mut();
 
@@ -39,8 +45,27 @@ fn ui_system(
         .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
         .show(contexts.ctx_for_window_mut(window.single()), |ui| {
             if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-                if let Some(average) = fps.average() {
-                    ui.label(format!("FPS: {:.0}", average));
+                if let Some(measurement) = fps.measurement() {
+                    fps_data.push_back(measurement.value);
+                    if fps_data.len() > 100 {
+                        fps_data.pop_front();
+                    }
+
+                    let average = fps_data.iter().sum::<f64>() / fps_data.len() as f64;
+                    let five_percent = fps_data
+                        .iter()
+                        .take(20)
+                        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                        .unwrap();
+                    let one_percent = fps_data
+                        .iter()
+                        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                        .unwrap();
+
+                    ui.label(format!(
+                        "average {:.0}, 5% {:.0}, 1% {:.0}",
+                        average, five_percent, one_percent
+                    ));
                 }
             }
 
