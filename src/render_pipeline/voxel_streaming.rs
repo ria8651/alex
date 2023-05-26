@@ -2,6 +2,7 @@ use super::{
     voxel_world::{CpuVoxelWorld, GpuVoxelWorld, VoxelData},
     MainPassSettings,
 };
+use crate::render_pipeline::cpu_brickmap::BRICK_SIZE;
 use bevy::{
     prelude::*,
     render::{renderer::RenderQueue, view::ExtractedView, RenderApp, RenderSet},
@@ -44,8 +45,8 @@ fn voxel_streaming_system(
         streaming_range: f32,
     ) {
         let node_size = (1 << brickmap_depth - depth) as f32;
-        let distance = (pos.as_vec3() + node_size / 2.0 - streaming_pos).length();
-        let ratio = node_size / distance;
+        let distance = (pos.as_vec3() + node_size / 2.0 - streaming_pos).length() * BRICK_SIZE as f32;
+        let ratio = 100.0 * node_size / distance;
 
         let children_index = 8 * (brickmap[node_index] as usize & 0xFFFF);
         if children_index == 0 {
@@ -140,12 +141,12 @@ fn voxel_streaming_system(
                     return;
                 }
 
-                let dim = gpu_voxel_world.brick_texture_size / 16;
+                let dim = gpu_voxel_world.brick_texture_size / BRICK_SIZE;
                 let brick_pos = UVec3::new(
                     brick_index.unwrap() as u32 / (dim.x * dim.y),
                     brick_index.unwrap() as u32 / dim.x % dim.y,
                     brick_index.unwrap() as u32 % dim.x,
-                ) * 16;
+                ) * BRICK_SIZE;
 
                 let cpu_brick = &cpu_voxel_world.bricks[cpu_child_brick_index as usize];
                 render_queue.write_texture(
@@ -162,13 +163,13 @@ fn voxel_streaming_system(
                     cpu_brick.to_gpu(),
                     wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: Some(NonZeroU32::new(16 * 4).unwrap()),
-                        rows_per_image: Some(NonZeroU32::new(16).unwrap()),
+                        bytes_per_row: Some(NonZeroU32::new(BRICK_SIZE * 4).unwrap()),
+                        rows_per_image: Some(NonZeroU32::new(BRICK_SIZE).unwrap()),
                     },
                     wgpu::Extent3d {
-                        width: 16,
-                        height: 16,
-                        depth_or_array_layers: 16,
+                        width: BRICK_SIZE,
+                        height: BRICK_SIZE,
+                        depth_or_array_layers: BRICK_SIZE,
                     },
                 );
 

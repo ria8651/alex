@@ -54,7 +54,7 @@ impl Default for MainPassSettings {
             shadows: true,
             show_brick_texture: false,
             alpha_cutoff: 0.0,
-            streaming_ratio: 0.1,
+            streaming_ratio: 1.0,
             streaming_range: 0.0,
             misc_bool: false,
             misc_float: 1.0,

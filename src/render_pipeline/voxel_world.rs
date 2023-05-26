@@ -1,4 +1,4 @@
-use super::{cpu_brickmap::CpuBrickmap, load_anvil::load_anvil};
+use super::{cpu_brickmap::{CpuBrickmap, BRICK_SIZE}, load_anvil::load_anvil};
 use bevy::{
     prelude::*,
     render::{
@@ -29,18 +29,18 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let brickmap_depth = 6;
+        let world_depth = 12;
         let brick_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 12;
 
         // load world (slooowwww)
-        let path = PathBuf::from("assets/worlds/hermitcraft7");
-        let mut cpu_brickmap = load_anvil(path, brickmap_depth);
+        let path = PathBuf::from("assets/worlds/imperial_city");
+        let mut cpu_brickmap = load_anvil(path, world_depth);
         cpu_brickmap.recreate_mipmaps();
 
         // setup gpu brickmap
         let brickmap = vec![0; 4 * 8 * brickmap_max_nodes];
-        let dim = brick_texture_size / 16;
+        let dim = brick_texture_size / BRICK_SIZE;
         let brick_count = (dim.x * dim.y * dim.z) as usize;
         let gpu_voxel_world = GpuVoxelWorld {
             brickmap,
@@ -56,7 +56,7 @@ impl Plugin for VoxelWorldPlugin {
 
         // uniforms
         let voxel_uniforms = VoxelUniforms {
-            brickmap_depth: brickmap_depth,
+            brickmap_depth: world_depth - BRICK_SIZE.ilog2(),
         };
         let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());
         uniform_buffer.write_buffer(render_device, render_queue);

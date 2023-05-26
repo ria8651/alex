@@ -3,12 +3,14 @@ use bevy::{
     core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
     prelude::*,
+    reflect::TypeRegistryInternal,
     window::PrimaryWindow,
 };
 use bevy_egui::{
-    egui::{self, Slider},
+    egui::{self, DragValue, Slider},
     EguiContexts, EguiPlugin,
 };
+use bevy_inspector_egui::{reflect_inspector::ui_for_value, DefaultInspectorConfigPlugin};
 use std::collections::VecDeque;
 
 pub struct UiPlugin;
@@ -16,6 +18,7 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(EguiPlugin)
+            .add_plugin(DefaultInspectorConfigPlugin)
             .add_plugin(FrameTimeDiagnosticsPlugin::default())
             .insert_resource(FpsData(VecDeque::new()))
             .add_system(ui_system);
@@ -36,14 +39,17 @@ fn ui_system(
     )>,
     window: Query<Entity, With<PrimaryWindow>>,
     diagnostics: Res<Diagnostics>,
-    mut character: Query<&mut Transform, With<CharacterEntity>>,
+    mut character: Query<(&mut Transform, &mut CharacterEntity)>,
     mut fps_data: ResMut<FpsData>,
 ) {
-    let mut character = character.single_mut();
+    let (mut character, mut character_entity) = character.single_mut();
 
     egui::Window::new("Settings")
         .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
         .show(contexts.ctx_for_window_mut(window.single()), |ui| {
+            // add a text field to change the speed of the character
+            ui.add(DragValue::new(&mut character_entity.speed));
+
             if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
                 if let Some(measurement) = fps.measurement() {
                     fps_data.push_back(measurement.value);
@@ -74,7 +80,7 @@ fn ui_system(
             {
                 egui::CollapsingHeader::new(format!("Camera Settings {}", i))
                     .default_open(true)
-                    .show(ui, |ui| {
+                    .show(ui, |mut ui| {
                         ui.checkbox(&mut trace_settings.show_ray_steps, "Show ray steps");
                         ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
                         ui.checkbox(&mut trace_settings.shadows, "Shadows");
@@ -84,7 +90,7 @@ fn ui_system(
                                 .text("Alpha cutoff"),
                         );
                         ui.add(
-                            Slider::new(&mut trace_settings.streaming_ratio, 0.0..=1.0)
+                            Slider::new(&mut trace_settings.streaming_ratio, 0.0..=3.0)
                                 .text("Streaming ratio"),
                         );
                         ui.add(
@@ -93,55 +99,16 @@ fn ui_system(
                         );
                         ui.checkbox(&mut trace_settings.misc_bool, "Misc");
                         ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
-                        if let Some(mut tonemapping) = tonemapping {
-                            egui::ComboBox::from_label("")
-                                .selected_text(format!("{:?}", tonemapping.as_mut()))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        tonemapping.as_mut(),
-                                        Tonemapping::AcesFitted,
-                                        "AcesFitted",
-                                    );
-                                    ui.selectable_value(
-                                        tonemapping.as_mut(),
-                                        Tonemapping::AgX,
-                                        "AgX",
-                                    );
-                                    ui.selectable_value(
-                                        tonemapping.as_mut(),
-                                        Tonemapping::BlenderFilmic,
-                                        "BlenderFilmic",
-                                    );
-                                    ui.selectable_value(
-                                        tonemapping.as_mut(),
-                                        Tonemapping::Reinhard,
-                                        "Reinhard",
-                                    );
-                                    ui.selectable_value(
-                                        tonemapping.as_mut(),
-                                        Tonemapping::ReinhardLuminance,
-                                        "ReinhardLuminance",
-                                    );
-                                    ui.selectable_value(
-                                        tonemapping.as_mut(),
-                                        Tonemapping::SomewhatBoringDisplayTransform,
-                                        "SomewhatBoringDisplayTransform",
-                                    );
-                                    ui.selectable_value(
-                                        tonemapping.as_mut(),
-                                        Tonemapping::None,
-                                        "None",
-                                    );
-                                });
+
+                        let registry = &TypeRegistryInternal::default();
+                        if let Some(tonemapping) = tonemapping {
+                            ui_for_value(tonemapping.into_inner(), &mut ui, registry);
                         }
                         if let Some(bloom_settings) = bloom_settings {
-                            ui.add(
-                                Slider::new(&mut bloom_settings.into_inner().intensity, 0.0..=1.0)
-                                    .text("Bloom"),
-                            );
+                            ui_for_value(bloom_settings.into_inner(), &mut ui, registry);
                         }
                         if let Some(fxaa) = fxaa {
-                            ui.checkbox(&mut fxaa.into_inner().enabled, "FXAA");
+                            ui_for_value(fxaa.into_inner(), &mut ui, registry);
                         }
                         if let Some(projection) = projection {
                             match projection.into_inner() {

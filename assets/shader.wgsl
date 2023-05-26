@@ -67,34 +67,26 @@ struct Brick {
 }
 
 fn find_brick(pos: vec3<i32>) -> Brick {
-    if (uniforms.show_brick_texture == 0u) {
-        var node_index = 0u;
-        var node_pos = vec3(0);
-        var depth = 1u;
-        loop {
-            let offset = vec3(1 << (voxel_uniforms.brick_map_depth - depth));
-            let mask = vec3<i32>(pos >= node_pos + offset);
-            node_pos += mask * offset;
+    var node_index = 0u;
+    var node_pos = vec3(0);
+    var depth = 1u;
+    loop {
+        let offset = vec3(1 << (voxel_uniforms.brick_map_depth - depth));
+        let mask = vec3<i32>(pos >= node_pos + offset);
+        node_pos += mask * offset;
 
-            let child_index = mask.x * 4 + mask.y * 2 + mask.z;
-            let new_node_index = node_index + u32(child_index);
-            let new_node = brickmap[new_node_index];
-            if ((new_node & 0xFFFFu) == 0u || depth >= u32(f32(voxel_uniforms.brick_map_depth) * uniforms.misc_float)) {
-                return Brick(new_node >> 16u, node_pos, depth);
-            }
-
-            depth = depth + 1u;
-            node_index = 8u * (new_node & 0xFFFFu);
+        let child_index = mask.x * 4 + mask.y * 2 + mask.z;
+        let new_node_index = node_index + u32(child_index);
+        let new_node = brickmap[new_node_index];
+        if ((new_node & 0xFFFFu) == 0u || depth >= u32(f32(voxel_uniforms.brick_map_depth) * uniforms.misc_float)) {
+            return Brick(new_node >> 16u, node_pos, depth);
         }
 
-        return Brick(0u, vec3(0), 0u);
-    } else {
-        let dim = textureDimensions(bricks) / (1 << BRICK_SIZE);
-        let brick_pos = vec3<i32>(vec3<f32>(pos) / f32(1u << voxel_uniforms.brick_map_depth) * vec3<f32>(dim));
-        let index = brick_pos.x * dim.y * dim.z + brick_pos.y * dim.z + brick_pos.z;
-
-        return Brick(u32(index), brick_pos, voxel_uniforms.brick_map_depth - u32(log2(f32(dim.x))));
+        depth = depth + 1u;
+        node_index = 8u * (new_node & 0xFFFFu);
     }
+
+    return Brick(0u, vec3(0), 0u);
 }
 
 // maps a point form the -1 to 1 cube to a point in the cube l to u

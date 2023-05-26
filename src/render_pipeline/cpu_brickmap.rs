@@ -1,8 +1,9 @@
-use bevy::{prelude::*, utils::HashMap};
-use fastanvil::{Block, BlockData};
+use bevy::prelude::*;
+
+pub const BRICK_SIZE: u32 = 16;
 
 pub struct Brick {
-    data: [[u8; 4]; 16 * 16 * 16],
+    data: [[u8; 4]; (BRICK_SIZE * BRICK_SIZE * BRICK_SIZE) as usize],
 }
 
 #[derive(Copy, Clone)]
@@ -34,12 +35,7 @@ impl CpuBrickmap {
         }
     }
 
-    pub fn place_brick(
-        &mut self,
-        block_data: &BlockData<Block>,
-        pos: UVec3,
-        palette: &HashMap<String, [u8; 4]>,
-    ) -> Result<(), String> {
+    pub fn place_brick(&mut self, brick: Brick, pos: UVec3) -> Result<(), String> {
         let mut node_index = 0;
         let mut node_pos = UVec3::new(0, 0, 0);
         let mut node_depth = 1;
@@ -55,7 +51,6 @@ impl CpuBrickmap {
             if new_node == 0 {
                 if node_depth == self.brickmap_depth {
                     // place in data
-                    let brick = Brick::from_block_data(block_data, &palette);
                     let brick_index = self.bricks.len() as u32;
                     self.brickmap[index].brick = brick_index;
                     self.bricks.push(brick);
@@ -114,7 +109,7 @@ impl CpuBrickmap {
         let texture_length = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
         let mut bricks = vec![0; 4 * texture_length as usize];
 
-        let dim = brick_texture_size / 16;
+        let dim = brick_texture_size / BRICK_SIZE;
         let max_bricks = (dim.x * dim.y * dim.z) as usize;
 
         for brick_index in 0..self.bricks.len() {
@@ -124,15 +119,15 @@ impl CpuBrickmap {
             }
 
             let brick = &self.bricks[brick_index];
-            let dim = brick_texture_size / 16;
+            let dim = brick_texture_size / BRICK_SIZE;
             let brick_pos = UVec3::new(
                 brick_index as u32 / (dim.x * dim.y),
                 brick_index as u32 / dim.x % dim.y,
                 brick_index as u32 % dim.x,
-            ) * 16;
-            for x in 0..16 {
-                for y in 0..16 {
-                    for z in 0..16 {
+            ) * BRICK_SIZE;
+            for x in 0..BRICK_SIZE {
+                for y in 0..BRICK_SIZE {
+                    for z in 0..BRICK_SIZE {
                         let pos = UVec3::new(x, y, z);
                         let p = brick_pos + pos;
                         let index = p.z * brick_texture_size.x * brick_texture_size.y
@@ -176,15 +171,15 @@ impl CpuBrickmap {
                 error!("tried to mip empty brick");
             }
 
-            for x in 0..16 {
-                for y in 0..16 {
-                    for z in 0..16 {
+            for x in 0..BRICK_SIZE {
+                for y in 0..BRICK_SIZE {
+                    for z in 0..BRICK_SIZE {
                         let pos = UVec3::new(x, y, z);
 
                         // get the average of the 8 children
                         let mut colour = Vec3::ZERO;
                         let mut total_alpha = 0.0;
-                        let mask = pos.cmpge(UVec3::splat(8));
+                        let mask = pos.cmpge(UVec3::splat(BRICK_SIZE / 2));
                         let child_node_index = children_index as usize
                             + mask.x as usize * 4
                             + mask.y as usize * 2
@@ -198,8 +193,8 @@ impl CpuBrickmap {
                             error!("child brick index out of bounds");
                         }
                         for j in 0..8 {
-                            let child_pos_in_brick =
-                                2 * (pos % 8) + UVec3::new(j & 1, j >> 1 & 1, j >> 2 & 1);
+                            let child_pos_in_brick = 2 * (pos % (BRICK_SIZE / 2))
+                                + UVec3::new(j & 1, j >> 1 & 1, j >> 2 & 1);
                             let child_colour =
                                 brickmap.bricks[child_brick_index as usize].get(child_pos_in_brick);
 
@@ -239,53 +234,28 @@ impl CpuBrickmap {
 impl Brick {
     pub fn empty() -> Self {
         Self {
-            data: [[0; 4]; 16 * 16 * 16],
+            data: [[0; 4]; (BRICK_SIZE * BRICK_SIZE * BRICK_SIZE) as usize],
         }
     }
 
     pub fn get(&self, pos: UVec3) -> [u8; 4] {
         #[cfg(debug_assertions)]
-        if pos.cmplt(UVec3::ZERO).any() || pos.cmpge(UVec3::splat(16)).any() {
+        if pos.cmplt(UVec3::ZERO).any() || pos.cmpge(UVec3::splat(BRICK_SIZE)).any() {
             error!("pos out of bounds");
         }
 
-        let index = (pos.z * 16 * 16 + pos.y * 16 + pos.x) as usize;
+        let index = (pos.z * BRICK_SIZE * BRICK_SIZE + pos.y * BRICK_SIZE + pos.x) as usize;
         self.data[index]
     }
 
     pub fn write(&mut self, pos: UVec3, colour: [u8; 4]) {
         #[cfg(debug_assertions)]
-        if pos.cmplt(UVec3::ZERO).any() || pos.cmpge(UVec3::splat(16)).any() {
+        if pos.cmplt(UVec3::ZERO).any() || pos.cmpge(UVec3::splat(BRICK_SIZE)).any() {
             error!("pos out of bounds");
         }
 
-        let index = (pos.z * 16 * 16 + pos.y * 16 + pos.x) as usize;
+        let index = (pos.z * BRICK_SIZE * BRICK_SIZE + pos.y * BRICK_SIZE + pos.x) as usize;
         self.data[index] = colour;
-    }
-
-    pub fn from_block_data(
-        block_data: &BlockData<Block>,
-        palette: &HashMap<String, [u8; 4]>,
-    ) -> Self {
-        let mut brick = Brick::empty();
-        for x in 0..16 {
-            for y in 0..16 {
-                for z in 0..16 {
-                    let block = block_data.at(x as usize, y as usize, z as usize);
-                    if block.unwrap().name() == "minecraft:air" {
-                        continue;
-                    }
-
-                    let block_name = block.unwrap().name();
-                    let defualt_col = palette.get("").unwrap();
-                    let colour = palette.get(block_name).unwrap_or(&defualt_col);
-
-                    let pos = UVec3::new(x, y, z);
-                    brick.write(pos, *colour);
-                }
-            }
-        }
-        brick
     }
 
     #[allow(unused_variables)]

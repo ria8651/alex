@@ -13,7 +13,7 @@ fn main() {
             ..default()
         }).set(WindowPlugin {
             primary_window: Some(Window {
-                resolution: (1920.0, 1080.0).into(),
+                resolution: (1920.0 / 2.0, 1080.0 / 2.0).into(),
                 ..default()
             }),
             ..default()
