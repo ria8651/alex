@@ -172,6 +172,11 @@ fn voxel_streaming_system(
                         depth_or_array_layers: BRICK_SIZE,
                     },
                 );
+                render_queue.write_buffer(
+                    &voxel_data.bitmasks,
+                    (brick_index.unwrap() * 512) as u64,
+                    &cpu_brick.get_bitmask(),
+                );
 
                 gpu_voxel_world.brickmap[hole.unwrap() * 8 + i] |=
                     (brick_index.unwrap() as u32) << 16;

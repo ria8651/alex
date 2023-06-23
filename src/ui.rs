@@ -137,14 +137,14 @@ fn ui_system(
                 println!("{:?}, {:?}", character.translation, character.rotation);
             }
             if ui.button("go to pos1").clicked() {
-                character.translation = Vec3::new(-0.5151253, -0.124093756, 0.77565575);
+                character.translation = Vec3::new(-12.808739, 5.79611, 10.124223);
                 character.rotation =
-                    Quat::from_array([0.041948874, 0.17606115, -0.0075151, 0.9834563]);
+                    Quat::from_array([-0.28589484, -0.37392232, -0.12235297, 0.8737712]);
             }
             if ui.button("go to pos2").clicked() {
-                character.translation = Vec3::new(-0.26596254, 0.31184837, 0.95114636);
+                character.translation = Vec3::new(-2.7467077, 23.573212, -1.1159008);
                 character.rotation =
-                    Quat::from_array([-0.24431482, 0.2940709, 0.07802672, 0.9207303]);
+                    Quat::from_array([-0.498245, -0.5017268, -0.49896964, 0.5010505]);
             }
         });
 }

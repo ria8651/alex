@@ -9,7 +9,7 @@ fn load_palette() -> HashMap<String, [u8; 4]> {
     json.insert("minecraft:grass".to_string(), [0, 0, 0, 0]);
     json.insert("minecraft:tall_grass".to_string(), [0, 0, 0, 0]);
     json.insert("minecraft:grass_block".to_string(), [62, 204, 18, 255]);
-    json.insert("minecraft:water".to_string(), [20, 105, 201, 255]);
+    json.insert("minecraft:water".to_string(), [20, 105, 201, 30]);
     json.insert("minecraft:cave_air".to_string(), [0, 0, 0, 0]);
     json.insert("minecraft:lava".to_string(), [255, 123, 0, 255]);
     json.insert("minecraft:seagrass".to_string(), [62, 204, 18, 255]);

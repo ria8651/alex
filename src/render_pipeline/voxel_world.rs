@@ -29,12 +29,12 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 12;
+        let world_depth = 9;
         let brick_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 12;
 
         // load world (slooowwww)
-        let path = PathBuf::from("assets/worlds/imperial_city");
+        let path = PathBuf::from("assets/worlds/hermitcraft7");
         let mut cpu_brickmap = load_anvil(path, world_depth);
         cpu_brickmap.recreate_mipmaps();
 
@@ -61,7 +61,7 @@ impl Plugin for VoxelWorldPlugin {
         let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());
         uniform_buffer.write_buffer(render_device, render_queue);
 
-        // storage
+        // brickmap
         let (_, brickmap, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
         let brickmap = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: brickmap,
@@ -69,7 +69,7 @@ impl Plugin for VoxelWorldPlugin {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
-        // texture
+        // bricks
         let texture_size = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
         let bricks = vec![0; 4 * texture_size as usize];
         let bricks = render_device.create_texture_with_data(
@@ -92,6 +92,16 @@ impl Plugin for VoxelWorldPlugin {
         );
         let bricks_view = bricks.create_view(&TextureViewDescriptor::default());
 
+        // bitmasks
+        let dim = brick_texture_size / 16;
+        let brick_count = (dim.x * dim.y * dim.z) as usize;
+        let bitmasks = vec![0; 512 * brick_count];
+        let bitmasks = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            contents: &bitmasks,
+            label: None,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
         let bind_group_layout =
             render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("voxelization bind group layout"),
@@ -110,7 +120,7 @@ impl Plugin for VoxelWorldPlugin {
                         binding: 1,
                         visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
                         ty: BindingType::Buffer {
-                            ty: BufferBindingType::Storage { read_only: false },
+                            ty: BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: BufferSize::new(4),
                         },
@@ -120,9 +130,19 @@ impl Plugin for VoxelWorldPlugin {
                         binding: 2,
                         visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
                         ty: BindingType::StorageTexture {
-                            access: StorageTextureAccess::ReadWrite,
+                            access: StorageTextureAccess::ReadOnly,
                             format: TextureFormat::Rgba8Unorm,
                             view_dimension: TextureViewDimension::D3,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: BufferSize::new(512),
                         },
                         count: None,
                     },
@@ -145,6 +165,10 @@ impl Plugin for VoxelWorldPlugin {
                     binding: 2,
                     resource: BindingResource::TextureView(&bricks_view),
                 },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: bitmasks.as_entire_binding(),
+                },
             ],
         });
 
@@ -155,6 +179,7 @@ impl Plugin for VoxelWorldPlugin {
                 bricks,
                 bricks_view,
                 brickmap,
+                bitmasks,
                 bind_group_layout,
                 bind_group,
             })
@@ -171,6 +196,7 @@ pub struct VoxelData {
     pub bricks: Texture,
     pub bricks_view: TextureView,
     pub brickmap: Buffer,
+    pub bitmasks: Buffer,
     pub bind_group_layout: BindGroupLayout,
     pub bind_group: BindGroup,
 }
@@ -208,6 +234,10 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             BindGroupEntry {
                 binding: 2,
                 resource: BindingResource::TextureView(&voxel_data.bricks_view),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: voxel_data.bitmasks.as_entire_binding(),
             },
         ],
     });

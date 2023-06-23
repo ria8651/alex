@@ -22,9 +22,11 @@ struct MainPassUniforms {
 @group(0) @binding(0)
 var<uniform> voxel_uniforms: VoxelUniforms;
 @group(0) @binding(1)
-var<storage, read_write> brickmap: array<u32>;
+var<storage, read> brickmap: array<u32>;
 @group(0) @binding(2)
-var bricks: texture_storage_3d<rgba8unorm, read_write>;
+var bricks: texture_storage_3d<rgba8unorm, read>;
+@group(0) @binding(3)
+var<storage, read> bitmasks: array<u32>;
 
 @group(1) @binding(0)
 var<uniform> uniforms: MainPassUniforms;
@@ -156,19 +158,14 @@ fn shoot_ray(r: Ray) -> HitInfo {
         if (brick.index != 0u) {
             // step through the brick using dda
             let brick_size = i32(1u << BRICK_SIZE);
-            let dim = textureDimensions(bricks) / brick_size;
-            let brick_pos_in_texture = vec3(
-                i32(brick.index) / (dim.z * dim.y),
-                (i32(brick.index) / dim.z) % dim.y,
-                i32(brick.index) % dim.z,
-            ) * brick_size;
             let pos_in_brick_float = (tcpotr - vec3<f32>(brick.pos)) / f32(1u << (voxel_uniforms.brick_map_depth - brick.depth)) * f32(brick_size);
             var pos_in_brick = vec3<i32>(pos_in_brick_float);
             var t_max_inner = (vec3<f32>(pos_in_brick) - pos_in_brick_float + 0.5 + r_sign * 0.5) / dir;
 
             while (steps < 500u) {
-                let col = textureLoad(bricks, brick_pos_in_texture + pos_in_brick);
-                if (col.a > uniforms.alpha_cutoff) {
+                let index = u32(pos_in_brick.z * brick_size * brick_size + pos_in_brick.y * brick_size + pos_in_brick.x);
+                let bit = (bitmasks[brick.index * 128u + index / 32u] >> (index % 32u)) & 1u;
+                if (bit == 1u) {
                     // undo preperation for next step
                     t_max_inner += normal / dir;
 
@@ -179,6 +176,15 @@ fn shoot_ray(r: Ray) -> HitInfo {
                     let half_size = f32(1u << voxel_uniforms.brick_map_depth) / f32(1u << BRICK_SIZE + brick.depth + 1u);
                     let voxel_pos = vec3<f32>(brick.pos) + (pos_in_brick_float + 0.5) / f32(brick_size);
                     let return_pos = tcpotr + normal * 0.00005 - f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
+
+                    // get color of the voxel
+                    let dim = textureDimensions(bricks) / brick_size;
+                    let brick_pos_in_texture = vec3(
+                        i32(brick.index) / (dim.z * dim.y),
+                        (i32(brick.index) / dim.z) % dim.y,
+                        i32(brick.index) % dim.z,
+                    ) * brick_size;
+                    let col = textureLoad(bricks, brick_pos_in_texture + pos_in_brick);
                     return HitInfo(true, Voxel(col, voxel_pos, half_size), return_pos, normal, steps);
                 }
 

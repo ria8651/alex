@@ -257,15 +257,30 @@ impl Brick {
         let index = (pos.z * BRICK_SIZE * BRICK_SIZE + pos.y * BRICK_SIZE + pos.x) as usize;
         self.data[index] = colour;
     }
-
-    #[allow(unused_variables)]
+    
     pub fn to_gpu(&self) -> &[u8] {
-        let (head, data, tail) = unsafe { self.data.align_to::<u8>() };
+        let (_head, data, _tail) = unsafe { self.data.align_to::<u8>() };
         #[cfg(debug_assertions)]
         {
-            assert!(head.is_empty());
-            assert!(tail.is_empty());
+            assert!(_head.is_empty());
+            assert!(_tail.is_empty());
         }
         data
+    }
+
+    pub fn get_bitmask(&self) -> [u8; 512] {
+        let mut bitmask = [0; 512];
+        for x in 0..16 {
+            for y in 0..16 {
+                for z in 0..16 {
+                    let index = (z * 16 * 16 + y * 16 + x) as usize;
+                    let colour = self.data[index];
+                    if colour[3] != 0 {
+                        bitmask[index / 8] |= 1 << (index % 8);
+                    }
+                }
+            }
+        }
+        bitmask
     }
 }
