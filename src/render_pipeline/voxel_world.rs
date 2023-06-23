@@ -1,4 +1,8 @@
-use super::{cpu_brickmap::{CpuBrickmap, BRICK_SIZE}, load_anvil::load_anvil};
+use super::{
+    cpu_brickmap::{CpuBrickmap, BRICK_SIZE},
+    load_anvil::load_anvil,
+    voxel_streaming::BRICK_OFFSET,
+};
 use bevy::{
     prelude::*,
     render::{
@@ -39,7 +43,7 @@ impl Plugin for VoxelWorldPlugin {
         cpu_brickmap.recreate_mipmaps();
 
         // setup gpu brickmap
-        let brickmap = vec![0; 4 * 8 * brickmap_max_nodes];
+        let brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
         let dim = brick_texture_size / BRICK_SIZE;
         let brick_count = (dim.x * dim.y * dim.z) as usize;
         let gpu_voxel_world = GpuVoxelWorld {
@@ -70,37 +74,37 @@ impl Plugin for VoxelWorldPlugin {
         });
 
         // bricks
-        let texture_size = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
-        let bricks = vec![0; 4 * texture_size as usize];
-        let bricks = render_device.create_texture_with_data(
-            render_queue,
-            &TextureDescriptor {
-                label: None,
-                view_formats: &[TextureFormat::Rgba8Unorm],
-                size: Extent3d {
-                    width: brick_texture_size.x,
-                    height: brick_texture_size.y,
-                    depth_or_array_layers: brick_texture_size.z,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D3,
-                format: TextureFormat::Rgba8Unorm,
-                usage: TextureUsages::STORAGE_BINDING,
-            },
-            &bricks,
-        );
-        let bricks_view = bricks.create_view(&TextureViewDescriptor::default());
-
-        // bitmasks
         let dim = brick_texture_size / 16;
         let brick_count = (dim.x * dim.y * dim.z) as usize;
-        let bitmasks = vec![0; 512 * brick_count];
-        let bitmasks = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            contents: &bitmasks,
+        let bricks = vec![0; 512 * brick_count];
+        let bricks = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            contents: &bricks,
             label: None,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
+
+        // bricks
+        // let texture_size = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
+        // let bricks = vec![0; 4 * texture_size as usize];
+        // let bricks = render_device.create_texture_with_data(
+        //     render_queue,
+        //     &TextureDescriptor {
+        //         label: None,
+        //         view_formats: &[TextureFormat::Rgba8Unorm],
+        //         size: Extent3d {
+        //             width: brick_texture_size.x,
+        //             height: brick_texture_size.y,
+        //             depth_or_array_layers: brick_texture_size.z,
+        //         },
+        //         mip_level_count: 1,
+        //         sample_count: 1,
+        //         dimension: TextureDimension::D3,
+        //         format: TextureFormat::Rgba8Unorm,
+        //         usage: TextureUsages::STORAGE_BINDING,
+        //     },
+        //     &bricks,
+        // );
+        // let bricks_view = bricks.create_view(&TextureViewDescriptor::default());
 
         let bind_group_layout =
             render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -129,16 +133,6 @@ impl Plugin for VoxelWorldPlugin {
                     BindGroupLayoutEntry {
                         binding: 2,
                         visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
-                        ty: BindingType::StorageTexture {
-                            access: StorageTextureAccess::ReadOnly,
-                            format: TextureFormat::Rgba8Unorm,
-                            view_dimension: TextureViewDimension::D3,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
@@ -146,6 +140,16 @@ impl Plugin for VoxelWorldPlugin {
                         },
                         count: None,
                     },
+                    // BindGroupLayoutEntry {
+                    //     binding: 2,
+                    //     visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
+                    //     ty: BindingType::StorageTexture {
+                    //         access: StorageTextureAccess::ReadOnly,
+                    //         format: TextureFormat::Rgba8Unorm,
+                    //         view_dimension: TextureViewDimension::D3,
+                    //     },
+                    //     count: None,
+                    // },
                 ],
             });
 
@@ -163,12 +167,12 @@ impl Plugin for VoxelWorldPlugin {
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: BindingResource::TextureView(&bricks_view),
+                    resource: bricks.as_entire_binding(),
                 },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: bitmasks.as_entire_binding(),
-                },
+                // BindGroupEntry {
+                //     binding: 2,
+                //     resource: BindingResource::TextureView(&bricks_view),
+                // },
             ],
         });
 
@@ -176,10 +180,8 @@ impl Plugin for VoxelWorldPlugin {
             .insert_resource(voxel_uniforms)
             .insert_resource(VoxelData {
                 uniform_buffer,
-                bricks,
-                bricks_view,
                 brickmap,
-                bitmasks,
+                bricks,
                 bind_group_layout,
                 bind_group,
             })
@@ -193,10 +195,9 @@ impl Plugin for VoxelWorldPlugin {
 #[derive(Resource)]
 pub struct VoxelData {
     pub uniform_buffer: UniformBuffer<VoxelUniforms>,
-    pub bricks: Texture,
-    pub bricks_view: TextureView,
     pub brickmap: Buffer,
-    pub bitmasks: Buffer,
+    pub bricks: Buffer,
+    // pub bricks: Texture,
     pub bind_group_layout: BindGroupLayout,
     pub bind_group: BindGroup,
 }
@@ -233,12 +234,12 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             },
             BindGroupEntry {
                 binding: 2,
-                resource: BindingResource::TextureView(&voxel_data.bricks_view),
+                resource: voxel_data.bricks.as_entire_binding(),
             },
-            BindGroupEntry {
-                binding: 3,
-                resource: voxel_data.bitmasks.as_entire_binding(),
-            },
+            // BindGroupEntry {
+            //     binding: 2,
+            //     resource: BindingResource::TextureView(&voxel_data.bricks_view),
+            // },
         ],
     });
     voxel_data.bind_group = bind_group;
