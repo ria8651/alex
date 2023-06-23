@@ -1,3 +1,5 @@
+#![feature(const_trait_impl, const_for)]
+
 use bevy::{prelude::*, render::camera::CameraRenderGraph};
 use character::CharacterEntity;
 use render_pipeline::MainPassSettings;

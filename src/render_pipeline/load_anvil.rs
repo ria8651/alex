@@ -22,7 +22,7 @@ fn load_palette() -> HashMap<String, [u8; 4]> {
 
 pub fn load_anvil(region_path: PathBuf, world_depth: u32) -> CpuBrickmap {
     let side_length = 1 << world_depth;
-    let mut brickmap = CpuBrickmap::new(world_depth - BRICK_SIZE.ilog2());
+    let mut brickmap = CpuBrickmap::new(world_depth - BRICK_SIZE.trailing_zeros());
 
     // load mc palette
     let palette = load_palette();

@@ -257,8 +257,8 @@ impl Brick {
         let index = (pos.z * BRICK_SIZE * BRICK_SIZE + pos.y * BRICK_SIZE + pos.x) as usize;
         self.data[index] = colour;
     }
-    
-    pub fn to_gpu(&self) -> &[u8] {
+
+    pub unsafe fn to_gpu(&self) -> &[u8] {
         let (_head, data, _tail) = unsafe { self.data.align_to::<u8>() };
         #[cfg(debug_assertions)]
         {
@@ -268,15 +268,39 @@ impl Brick {
         data
     }
 
-    pub fn get_bitmask(&self) -> [u8; 512] {
-        let mut bitmask = [0; 512];
-        for x in 0..16 {
-            for y in 0..16 {
-                for z in 0..16 {
-                    let index = (z * 16 * 16 + y * 16 + x) as usize;
+    pub fn brick_ints() -> usize {
+        (2..=BRICK_SIZE.trailing_zeros())
+            .map(|v| (1usize << v).pow(3))
+            .sum::<usize>()
+            / 32
+    }
+
+    fn size_offset() -> Vec<(u32, usize)> {
+        (2..=BRICK_SIZE.trailing_zeros())
+            .rev()
+            .scan(0, |acc, x| {
+                let size: usize = 1 << x;
+                let output = (size as u32, *acc);
+                *acc += size.pow(3);
+                Some(output)
+            })
+            .collect()
+    }
+
+    pub fn get_bitmask(&self) -> Vec<u8> {
+        let mut bitmask = vec![0; 4 * Self::brick_ints()];
+        for x in 0..BRICK_SIZE {
+            for y in 0..BRICK_SIZE {
+                for z in 0..BRICK_SIZE {
+                    let index = (z * BRICK_SIZE * BRICK_SIZE + y * BRICK_SIZE + x) as usize;
                     let colour = self.data[index];
                     if colour[3] != 0 {
-                        bitmask[index / 8] |= 1 << (index % 8);
+                        for (size, offset) in Self::size_offset() {
+                            let pos = UVec3::new(x, y, z) * size / BRICK_SIZE;
+                            let sub_index = pos.x * size * size + pos.y * size + pos.z;
+                            let index = offset + sub_index as usize;
+                            bitmask[index / 8] |= 1 << (index % 8);
+                        }
                     }
                 }
             }

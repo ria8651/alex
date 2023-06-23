@@ -2,7 +2,7 @@ use super::{
     voxel_world::{CpuVoxelWorld, GpuVoxelWorld, VoxelData},
     MainPassSettings,
 };
-use crate::render_pipeline::cpu_brickmap::BRICK_SIZE;
+use crate::render_pipeline::cpu_brickmap::{BRICK_SIZE, Brick};
 use bevy::{
     prelude::*,
     render::{renderer::RenderQueue, view::ExtractedView, RenderApp, RenderSet},
@@ -145,7 +145,7 @@ fn voxel_streaming_system(
                 let cpu_brick = &cpu_voxel_world.bricks[cpu_child_brick_index as usize];
                 render_queue.write_buffer(
                     &voxel_data.bricks,
-                    (brick_index.unwrap() * 512) as u64,
+                    (brick_index.unwrap() * 4 * Brick::brick_ints()) as u64,
                     &cpu_brick.get_bitmask(),
                 );
 

@@ -1,5 +1,5 @@
 use super::{
-    cpu_brickmap::{CpuBrickmap, BRICK_SIZE},
+    cpu_brickmap::{Brick, CpuBrickmap, BRICK_SIZE},
     load_anvil::load_anvil,
     voxel_streaming::BRICK_OFFSET,
 };
@@ -60,7 +60,9 @@ impl Plugin for VoxelWorldPlugin {
 
         // uniforms
         let voxel_uniforms = VoxelUniforms {
-            brickmap_depth: world_depth - BRICK_SIZE.ilog2(),
+            brickmap_depth: world_depth - BRICK_SIZE.trailing_zeros(),
+            brick_size: BRICK_SIZE.trailing_zeros() as u32,
+            brick_ints: Brick::brick_ints() as u32,
         };
         let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());
         uniform_buffer.write_buffer(render_device, render_queue);
@@ -74,9 +76,7 @@ impl Plugin for VoxelWorldPlugin {
         });
 
         // bricks
-        let dim = brick_texture_size / 16;
-        let brick_count = (dim.x * dim.y * dim.z) as usize;
-        let bricks = vec![0; 512 * brick_count];
+        let bricks = vec![0; 4 * Brick::brick_ints() * 8 * brickmap_max_nodes];
         let bricks = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: &bricks,
             label: None,
@@ -205,6 +205,8 @@ pub struct VoxelData {
 #[derive(Resource, ExtractResource, Clone, ShaderType)]
 pub struct VoxelUniforms {
     brickmap_depth: u32,
+    brick_size: u32,
+    brick_ints: u32,
 }
 
 fn prepare_uniforms(
