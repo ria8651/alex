@@ -33,7 +33,7 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 9;
+        let world_depth = 10;
         let brick_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 12;
 
@@ -44,8 +44,7 @@ impl Plugin for VoxelWorldPlugin {
 
         // setup gpu brickmap
         let brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
-        let dim = brick_texture_size / BRICK_SIZE;
-        let brick_count = (dim.x * dim.y * dim.z) as usize;
+        let brick_count = 8 * brickmap_max_nodes;
         let gpu_voxel_world = GpuVoxelWorld {
             brickmap,
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
@@ -76,7 +75,7 @@ impl Plugin for VoxelWorldPlugin {
         });
 
         // bricks
-        let bricks = vec![0; 4 * Brick::brick_ints() * 8 * brickmap_max_nodes];
+        let bricks = vec![0; 4 * Brick::brick_ints() * brick_count];
         let bricks = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: &bricks,
             label: None,

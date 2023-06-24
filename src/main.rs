@@ -1,4 +1,4 @@
-#![feature(const_trait_impl, const_for)]
+#![feature(int_roundings)]
 
 use bevy::{prelude::*, render::camera::CameraRenderGraph};
 use character::CharacterEntity;

@@ -269,14 +269,14 @@ impl Brick {
     }
 
     pub fn brick_ints() -> usize {
-        (2..=BRICK_SIZE.trailing_zeros())
+        (1..=BRICK_SIZE.trailing_zeros())
             .map(|v| (1usize << v).pow(3))
             .sum::<usize>()
-            / 32
+            .div_ceil(32)
     }
 
     fn size_offset() -> Vec<(u32, usize)> {
-        (2..=BRICK_SIZE.trailing_zeros())
+        (1..=BRICK_SIZE.trailing_zeros())
             .rev()
             .scan(0, |acc, x| {
                 let size: usize = 1 << x;

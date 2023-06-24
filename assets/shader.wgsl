@@ -159,7 +159,8 @@ fn shoot_ray(r: Ray) -> HitInfo {
         if brick.index > 0u {
             // step through the brick using dda
             let brick_size = i32(1u << voxel_uniforms.brick_size);
-            let initial_pos_in_brick = (tcpotr - vec3<f32>(brick.pos)) / f32(1u << (voxel_uniforms.brick_map_depth - brick.depth));
+            let annoying_factor = f32(1u << (voxel_uniforms.brick_map_depth - brick.depth));
+            let initial_pos_in_brick = (tcpotr - vec3<f32>(brick.pos)) / annoying_factor;
             var pos_in_brick = initial_pos_in_brick;
 
             while steps < 500u {
@@ -168,14 +169,17 @@ fn shoot_ray(r: Ray) -> HitInfo {
                 let pos_in_0 = vec3<i32>(pos_in_brick * 16.0);
                 let pos_in_1 = vec3<i32>(pos_in_brick * 8.0);
                 let pos_in_2 = vec3<i32>(pos_in_brick * 4.0);
+                let pos_in_3 = vec3<i32>(pos_in_brick * 2.0);
 
                 let index_0 = 0u + u32(pos_in_0.x * 16 * 16 + pos_in_0.y * 16 + pos_in_0.z);
                 let index_1 = 4096u + u32(pos_in_1.x * 8 * 8 + pos_in_1.y * 8 + pos_in_1.z);
                 let index_2 = 4608u + u32(pos_in_2.x * 4 * 4 + pos_in_2.y * 4 + pos_in_2.z);
+                let index_3 = 4672u + u32(pos_in_3.x * 2 * 2 + pos_in_3.y * 2 + pos_in_3.z);
 
                 let bit_0 = (bricks[brick.index * voxel_uniforms.brick_ints + index_0 / 32u] >> (index_0 % 32u)) & 1u;
                 let bit_1 = (bricks[brick.index * voxel_uniforms.brick_ints + index_1 / 32u] >> (index_1 % 32u)) & 1u;
                 let bit_2 = (bricks[brick.index * voxel_uniforms.brick_ints + index_2 / 32u] >> (index_2 % 32u)) & 1u;
+                let bit_3 = (bricks[brick.index * voxel_uniforms.brick_ints + index_3 / 32u] >> (index_3 % 32u)) & 1u;
 
                 if bit_0 == 0u {
                     size = 16;
@@ -186,16 +190,21 @@ fn shoot_ray(r: Ray) -> HitInfo {
                 if bit_2 == 0u {
                     size = 4;
                 }
+                if bit_3 == 0u {
+                    size = 2;
+                }
 
                 if bit_0 != 0u {
-                    // // get world space pos of the hit
-                    // let t_current_inner = min(min(t_max_inner.x, t_max_inner.y), t_max_inner.z);
-                    // tcpotr = vec3<f32>(brick.pos) + (pos_in_brick + dir * t_current_inner) / f32(brick_size) * f32(1u << (voxel_uniforms.brick_map_depth - brick.depth));
+                    // get world space pos of the hit
+                    let world_pos = vec3<f32>(brick.pos) + 
+                        (pos_in_brick + normal * 0.0001) * annoying_factor - 
+                        f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
 
-                    // // let half_size = f32(1u << voxel_uniforms.brick_map_depth) / f32(1u << (voxel_uniforms.brick_size + brick.depth + 1u));
-                    // let half_size = uniforms.misc_float / 100.0;
-                    // let voxel_pos = vec3<f32>(brick.pos) + (pos_in_brick + 0.5) / f32(brick_size);
-                    // let return_pos = tcpotr + normal * 0.00005 - f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
+                    // let half_size = f32(1u << voxel_uniforms.brick_map_depth) / f32(1u << (voxel_uniforms.brick_size + brick.depth + 1u));
+                    let half_size = annoying_factor / f32(brick_size);
+                    let voxel_pos = (floor(pos_in_brick * f32(brick_size)) + 0.5) / f32(brick_size) * 
+                        annoying_factor + vec3<f32>(brick.pos) - 
+                        f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
 
                     // // get color of the voxel
                     // let dim = textureDimensions(bricks) / brick_size;
@@ -206,7 +215,7 @@ fn shoot_ray(r: Ray) -> HitInfo {
                     // ) * brick_size;
                     // let col = textureLoad(bricks, brick_pos_in_texture + pos_in_brick);
 
-                    return HitInfo(true, Voxel(vec4(f32(size) / 16.0), vec3(0.0), 0.5 / f32(size)), vec3(0.0), normal, steps);
+                    return HitInfo(true, Voxel(vec4(1.0), voxel_pos, half_size), world_pos, normal, steps);
                 }
 
                 let rounded_pos = floor(pos_in_brick * f32(size)) / f32(size);
@@ -265,49 +274,49 @@ fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> v
     return diffuse * shadow * light_colour;
 }
 
-// fn check_voxel(p: vec3<f32>) -> f32 {
-//     let pos = p + f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
-//     if (!in_bounds(pos)) {
-//         return 0.0;
-//     }
+fn check_voxel(p: vec3<f32>) -> f32 {
+    let pos = p + f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
+    if (!in_bounds(pos)) {
+        return 0.0;
+    }
 
-//     let brick = find_brick(vec3<i32>(pos));
-//     if (brick.index == 0u) {
-//         return 0.0;
-//     }
+    let brick = find_brick(vec3<i32>(pos));
+    if (brick.index == 0u) {
+        return 0.0;
+    }
 
-//     let brick_size = i32(1u << voxel_uniforms.brick_size);
-//     let pos_in_brick_float = (p - vec3<f32>(brick.pos)) / f32(1u << (voxel_uniforms.brick_map_depth - brick.depth)) * f32(brick_size);
-//     var pos_in_brick = vec3<i32>(pos_in_brick_float);
-//     let index = u32(pos_in_brick.z * brick_size * brick_size + pos_in_brick.y * brick_size + pos_in_brick.x);
-//     let bit = (bricks[brick.index * 128u + index / 32u] >> (index % 32u)) & 1u;
+    let brick_size = i32(1u << voxel_uniforms.brick_size);
+    let annoying_factor = f32(1u << (voxel_uniforms.brick_map_depth - brick.depth));
+    let pos_in_brick = vec3<i32>((pos - vec3<f32>(brick.pos)) / annoying_factor * f32(brick_size));
+    let index = u32(pos_in_brick.x * brick_size * brick_size + pos_in_brick.y * brick_size + pos_in_brick.z);
+    let bit = (bricks[brick.index * voxel_uniforms.brick_ints + index / 32u] >> (index % 32u)) & 1u;
 
-//     return f32(bit);
-// }
-// // https://www.shadertoy.com/view/ldl3DS
-// fn vertex_ao(side: vec2<f32>, corner: f32) -> f32 {
-//     return (side.x + side.y + max(corner, side.x * side.y)) / 3.1;
-// }
-// fn voxel_ao(pos: vec3<f32>, d1: vec3<f32>, d2: vec3<f32>) -> vec4<f32> {
-//     let side = vec4(check_voxel(pos + d1), check_voxel(pos + d2), check_voxel(pos - d1), check_voxel(pos - d2));
-//     let corner = vec4(
-//         check_voxel(pos + d1 + d2), 
-//         check_voxel(pos - d1 + d2), 
-//         check_voxel(pos - d1 - d2), 
-//         check_voxel(pos + d1 - d2)
-//     );
+    return f32(bit);
+}
+// https://www.shadertoy.com/view/ldl3DS
+fn vertex_ao(side: vec2<f32>, corner: f32) -> f32 {
+    return (side.x + side.y + max(corner, side.x * side.y)) / 3.1;
+}
+fn voxel_ao(pos: vec3<f32>, d1: vec3<f32>, d2: vec3<f32>) -> vec4<f32> {
+    let side = vec4(check_voxel(pos + d1), check_voxel(pos + d2), check_voxel(pos - d1), check_voxel(pos - d2));
+    let corner = vec4(
+        check_voxel(pos + d1 + d2), 
+        check_voxel(pos - d1 + d2), 
+        check_voxel(pos - d1 - d2), 
+        check_voxel(pos + d1 - d2)
+    );
 
-//     var ao: vec4<f32>;
-//     ao.x = vertex_ao(side.xy, corner.x);
-//     ao.y = vertex_ao(side.yz, corner.y);
-//     ao.z = vertex_ao(side.zw, corner.z);
-//     ao.w = vertex_ao(side.wx, corner.w);
+    var ao: vec4<f32>;
+    ao.x = vertex_ao(side.xy, corner.x);
+    ao.y = vertex_ao(side.yz, corner.y);
+    ao.z = vertex_ao(side.zw, corner.z);
+    ao.w = vertex_ao(side.wx, corner.w);
 
-//     return 1.0 - ao;
-// }
-// fn glmod(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
-//     return x - y * floor(x / y);
-// }
+    return 1.0 - ao;
+}
+fn glmod(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
+    return x - y * floor(x / y);
+}
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
@@ -327,20 +336,22 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 
         // aproximate indirect with ambient and voxel ao
         var indirect_lighting = vec3(0.3);
-        // if (uniforms.indirect_lighting != 0u) {
-        //     let coords = hit.pos + hit.normal * hit.voxel.half_size;
-        //     let scaled_offset = 2.0 * hit.normal * hit.voxel.half_size;
-        //     let ao = voxel_ao(coords, scaled_offset.zxy, scaled_offset.yzx);
-        //     let uv = glmod(vec2(
-        //         dot(hit.normal * hit.pos.yzx, vec3(1.0)), 
-        //         dot(hit.normal * hit.pos.zxy, vec3(1.0))
-        //     ), vec2(2.0 * hit.voxel.half_size)) / (2.0 * hit.voxel.half_size);
+        if (uniforms.indirect_lighting != 0u) {
+            let offset = hit.normal * hit.voxel.half_size;
+            let ao = voxel_ao(hit.voxel.pos + offset, offset.zxy, offset.yzx);
+            let uv = glmod(
+                vec2(
+                    dot(hit.normal * hit.pos.yzx, vec3(1.0)), 
+                    dot(hit.normal * hit.pos.zxy, vec3(1.0))
+                ), 
+                vec2(hit.voxel.half_size)
+            ) / (hit.voxel.half_size);
 
-        //     var interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
-        //     interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
+            var interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
+            interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
 
-        //     indirect_lighting = vec3(interpolated_ao * 0.3);
-        // }
+            indirect_lighting = vec3(interpolated_ao * 0.3);
+        }
 
         // final blend
         output_colour = (direct_lighting + indirect_lighting) * hit.voxel.col.rgb;
