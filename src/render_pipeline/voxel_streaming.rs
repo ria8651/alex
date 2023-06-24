@@ -43,7 +43,7 @@ fn voxel_streaming_system(
         brickmap_depth: u32,
         streaming_pos: Vec3,
         nodes_to_divide: &mut Vec<(u32, UVec3, u32)>,
-        nodes_to_cull: &mut Vec<u32>,
+        nodes_to_cull: &mut Vec<(u32, UVec3, u32)>,
         streaming_ratio: f32,
         streaming_range: f32,
     ) {
@@ -64,7 +64,7 @@ fn voxel_streaming_system(
             return;
         }
         if ratio < streaming_ratio - streaming_range {
-            nodes_to_cull.push(node_index);
+            nodes_to_cull.push((node_index, pos, depth));
             return;
         }
 
@@ -108,6 +108,53 @@ fn voxel_streaming_system(
         );
     }
 
+    let allocate_brick =
+        |brick: &Brick, gpu_voxel_world: &mut GpuVoxelWorld| -> Result<usize, ()> {
+            let brick_index = gpu_voxel_world.brick_holes.pop_front();
+            if brick_index.is_none() {
+                warn!("ran out of space in brickmap");
+                return Err(());
+            }
+
+            render_queue.write_buffer(
+                &voxel_data.bricks,
+                (brick_index.unwrap() * 4 * Brick::brick_ints()) as u64,
+                &brick.get_bitmask(),
+            );
+
+            let dim = gpu_voxel_world.color_texture_size / BRICK_SIZE;
+            let brick_pos = UVec3::new(
+                brick_index.unwrap() as u32 / (dim.x * dim.y),
+                brick_index.unwrap() as u32 / dim.x % dim.y,
+                brick_index.unwrap() as u32 % dim.x,
+            ) * BRICK_SIZE;
+            render_queue.write_texture(
+                ImageCopyTexture {
+                    texture: &voxel_data.color,
+                    origin: wgpu::Origin3d {
+                        x: brick_pos.x,
+                        y: brick_pos.y,
+                        z: brick_pos.z,
+                    },
+                    mip_level: 0,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                unsafe { brick.to_gpu() },
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(NonZeroU32::new(BRICK_SIZE * 4).unwrap()),
+                    rows_per_image: Some(NonZeroU32::new(BRICK_SIZE).unwrap()),
+                },
+                wgpu::Extent3d {
+                    width: BRICK_SIZE,
+                    height: BRICK_SIZE,
+                    depth_or_array_layers: BRICK_SIZE,
+                },
+            );
+
+            Ok(brick_index.unwrap())
+        };
+
     // subdivision
     let mut divide_node = |index: usize, pos: UVec3, depth: u32| {
         let node = gpu_voxel_world.brickmap[index];
@@ -139,51 +186,14 @@ fn voxel_streaming_system(
             let cpu_child_node = cpu_voxel_world.brickmap[8 * cpu_node.children as usize + i];
             let cpu_child_brick_index = cpu_child_node.brick;
             if cpu_child_brick_index != 0 {
-                let brick_index = gpu_voxel_world.brick_holes.pop_front();
-                if brick_index.is_none() {
-                    warn!("ran out of space in brickmap");
-                    return;
-                }
-
-                let cpu_brick = &cpu_voxel_world.bricks[cpu_child_brick_index as usize];
-                render_queue.write_buffer(
-                    &voxel_data.bricks,
-                    (brick_index.unwrap() * 4 * Brick::brick_ints()) as u64,
-                    &cpu_brick.get_bitmask(),
-                );
-
-                let dim = gpu_voxel_world.color_texture_size / BRICK_SIZE;
-                let brick_pos = UVec3::new(
-                    brick_index.unwrap() as u32 / (dim.x * dim.y),
-                    brick_index.unwrap() as u32 / dim.x % dim.y,
-                    brick_index.unwrap() as u32 % dim.x,
-                ) * BRICK_SIZE;
-                render_queue.write_texture(
-                    ImageCopyTexture {
-                        texture: &voxel_data.color,
-                        origin: wgpu::Origin3d {
-                            x: brick_pos.x,
-                            y: brick_pos.y,
-                            z: brick_pos.z,
-                        },
-                        mip_level: 0,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    unsafe { cpu_brick.to_gpu() },
-                    wgpu::ImageDataLayout {
-                        offset: 0,
-                        bytes_per_row: Some(NonZeroU32::new(BRICK_SIZE * 4).unwrap()),
-                        rows_per_image: Some(NonZeroU32::new(BRICK_SIZE).unwrap()),
-                    },
-                    wgpu::Extent3d {
-                        width: BRICK_SIZE,
-                        height: BRICK_SIZE,
-                        depth_or_array_layers: BRICK_SIZE,
-                    },
-                );
-
-                let brick_index = BRICK_OFFSET + brick_index.unwrap() as u32;
-                gpu_voxel_world.brickmap[hole.unwrap() * 8 + i] = brick_index;
+                let brick_index = match allocate_brick(
+                    &cpu_voxel_world.bricks[cpu_child_brick_index as usize],
+                    &mut gpu_voxel_world,
+                ) {
+                    Ok(index) => index,
+                    Err(_) => return,
+                };
+                gpu_voxel_world.brickmap[hole.unwrap() * 8 + i] = BRICK_OFFSET + brick_index as u32;
             }
         }
 
@@ -194,36 +204,46 @@ fn voxel_streaming_system(
         divide_node(index as usize, pos, depth);
     }
 
-    // // culling
-    // fn cull_node(index: usize, gpu_voxel_world: &mut GpuVoxelWorld) {
-    //     let node = gpu_voxel_world.brickmap[index];
-    //     if node  {
-    //         warn!("node {} already culled", index);
-    //         return;
-    //     }
+    // culling
+    let mut cull_node = |index: usize, pos: UVec3, depth: u32| {
+        let node = gpu_voxel_world.brickmap[index];
+        if node >= BRICK_OFFSET {
+            warn!("node {} already culled", index);
+            return;
+        }
 
-    //     let children_index = 8 * (node & 0xFFFF) as usize;
-    //     for i in 0..8 {
-    //         let child_node = gpu_voxel_world.brickmap[children_index + i];
-    //         let child_node_brick_index = child_node >> 16;
-    //         if child_node_brick_index != 0 {
-    //             gpu_voxel_world
-    //                 .brick_holes
-    //                 .push_back(child_node_brick_index as usize);
-    //         }
-    //         let child_node_children_index = 8 * (child_node & 0xFFFF) as usize;
-    //         if child_node_children_index != 0 {
-    //             cull_node(child_node_children_index, gpu_voxel_world);
-    //         }
-    //     }
+        let children_index = 8 * node as usize;
+        for i in 0..8 {
+            let child_node = gpu_voxel_world.brickmap[children_index + i];
+            if child_node > BRICK_OFFSET {
+                gpu_voxel_world
+                    .brick_holes
+                    .push_back((child_node - BRICK_OFFSET) as usize);
+            }
+        }
 
-    //     gpu_voxel_world.brickmap[index] = 0;
-    //     gpu_voxel_world.brickmap_holes.push_back(children_index / 8);
-    // }
+        let (cpu_node_index, _, cpu_node_depth) = cpu_voxel_world.get_node(pos, Some(depth));
+        let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
+        if cpu_node_depth != depth {
+            warn!("tried to divide node that doesn't exist on cpu");
+            return;
+        }
 
-    // for node_index in nodes_to_cull {
-    //     cull_node(node_index as usize, &mut gpu_voxel_world);
-    // }
+        let brick_index = match allocate_brick(
+            &cpu_voxel_world.bricks[cpu_node.brick as usize],
+            &mut gpu_voxel_world,
+        ) {
+            Ok(index) => index,
+            Err(_) => return,
+        };
+
+        gpu_voxel_world.brickmap[index] = BRICK_OFFSET + brick_index as u32;
+        gpu_voxel_world.brickmap_holes.push_back(children_index / 8);
+    };
+
+    for (index, pos, depth) in nodes_to_cull {
+        cull_node(index as usize, pos, depth);
+    }
 
     let (_, data, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
     render_queue.write_buffer(&voxel_data.brickmap, 0, data);

@@ -33,8 +33,8 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 10;
-        let color_texture_size = UVec3::splat(640);
+        let world_depth = 12;
+        let color_texture_size = UVec3::splat(768);
         let brickmap_max_nodes = 1 << 12;
 
         // load world (slooowwww)
@@ -51,11 +51,6 @@ impl Plugin for VoxelWorldPlugin {
             brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
             color_texture_size,
         };
-
-        // let (brickmap, bricks) = cpu_brickmap.to_gpu(brick_texture_size);
-        // let (head, brickmap, tail) = unsafe { brickmap.align_to::<u8>() };
-        // assert!(head.is_empty());
-        // assert!(tail.is_empty());
 
         // uniforms
         let voxel_uniforms = VoxelUniforms {
