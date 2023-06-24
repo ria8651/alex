@@ -1,4 +1,7 @@
-use crate::{character::CharacterEntity, render_pipeline::MainPassSettings};
+use crate::{
+    character::CharacterEntity,
+    render_pipeline::{MainPassSettings, StreamingSettings},
+};
 use bevy::{
     core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
@@ -41,6 +44,7 @@ fn ui_system(
     diagnostics: Res<Diagnostics>,
     mut character: Query<(&mut Transform, &mut CharacterEntity)>,
     mut fps_data: ResMut<FpsData>,
+    mut streaming_settings: ResMut<StreamingSettings>,
 ) {
     let (mut character, mut character_entity) = character.single_mut();
 
@@ -84,20 +88,6 @@ fn ui_system(
                         ui.checkbox(&mut trace_settings.show_ray_steps, "Show ray steps");
                         ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
                         ui.checkbox(&mut trace_settings.shadows, "Shadows");
-                        ui.checkbox(&mut trace_settings.show_brick_texture, "Show brick texture");
-                        ui.add(
-                            Slider::new(&mut trace_settings.alpha_cutoff, 0.0..=1.0)
-                                .text("Alpha cutoff"),
-                        );
-                        ui.add(
-                            Slider::new(&mut trace_settings.streaming_ratio, 0.01..=3.0)
-                                .text("Streaming ratio")
-                                .logarithmic(true),
-                        );
-                        ui.add(
-                            Slider::new(&mut trace_settings.streaming_range, 0.0..=1.0)
-                                .text("Streaming range"),
-                        );
                         ui.checkbox(&mut trace_settings.misc_bool, "Misc");
                         ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
 
@@ -133,6 +123,9 @@ fn ui_system(
                         }
                     });
             }
+
+            ui.checkbox(&mut streaming_settings.pause_streaming, "Pause streaming");
+            ui.add(DragValue::new(&mut streaming_settings.streaming_value));
 
             if ui.button("print pos rot").clicked() {
                 println!("{:?}, {:?}", character.translation, character.rotation);

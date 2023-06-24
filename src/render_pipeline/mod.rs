@@ -15,7 +15,7 @@ use bevy::{
     },
     ui::UiPassNode,
 };
-pub use main_pass::MainPassSettings;
+pub use {main_pass::MainPassSettings, voxel_streaming::StreamingSettings};
 
 mod cpu_brickmap;
 mod load_anvil;

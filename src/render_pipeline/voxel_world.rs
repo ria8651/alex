@@ -20,6 +20,7 @@ pub struct CpuVoxelWorld(CpuBrickmap);
 #[derive(Resource)]
 pub struct GpuVoxelWorld {
     pub brickmap: Vec<u32>,
+    pub gpu_to_cpu: Vec<u32>,
     pub brickmap_holes: VecDeque<usize>,
     pub brick_holes: VecDeque<usize>,
     pub color_texture_size: UVec3,
@@ -33,7 +34,7 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 9;
+        let world_depth = 10;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
@@ -43,11 +44,17 @@ impl Plugin for VoxelWorldPlugin {
         cpu_brickmap.recreate_mipmaps();
 
         // setup gpu brickmap
-        let brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
+        let mut brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
+        let mut gpu_to_cpu = vec![0; 8 * brickmap_max_nodes];
+        for i in 0..8 {
+            brickmap[i] = BRICK_OFFSET + 1;
+            gpu_to_cpu[i] = i as u32;
+        }
         let dim = color_texture_size / BRICK_SIZE;
         let brick_count = (dim.x * dim.y * dim.z) as usize;
         let gpu_voxel_world = GpuVoxelWorld {
             brickmap,
+            gpu_to_cpu,
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
             brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
             color_texture_size,
@@ -75,7 +82,7 @@ impl Plugin for VoxelWorldPlugin {
         let counters = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: &counters,
             label: None,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         });
 
         // bricks

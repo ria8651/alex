@@ -220,8 +220,8 @@ fn shoot_ray(r: Ray) -> HitInfo {
                     ) * brick_size;
                     let col = textureLoad(color_texture, brick_pos_in_texture + vec3<i32>(pos_in_brick * f32(brick_size)));
 
-                    let counter_value = f32(counters[brick.node_index]) / 10000.0;
-                    return HitInfo(true, Voxel(vec4(counter_value), voxel_pos, half_size), world_pos, normal, steps);
+                    // let counter_value = f32(counters[brick.node_index]) / 100.0;
+                    return HitInfo(true, Voxel(vec4(col), voxel_pos, half_size), world_pos, normal, steps);
                 }
 
                 let rounded_pos = floor(pos_in_brick * f32(size)) / f32(size);
