@@ -297,7 +297,7 @@ impl Brick {
                     if colour[3] != 0 {
                         for (size, offset) in Self::size_offset() {
                             let pos = UVec3::new(x, y, z) * size / BRICK_SIZE;
-                            let sub_index = pos.x * size * size + pos.y * size + pos.z;
+                            let sub_index = pos.z * size * size + pos.y * size + pos.x;
                             let index = offset + sub_index as usize;
                             bitmask[index / 8] |= 1 << (index % 8);
                         }

@@ -50,7 +50,7 @@ impl Default for MainPassSettings {
     fn default() -> Self {
         Self {
             show_ray_steps: false,
-            indirect_lighting: false,
+            indirect_lighting: true,
             shadows: true,
             show_brick_texture: false,
             alpha_cutoff: 0.0,

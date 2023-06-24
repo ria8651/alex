@@ -1,12 +1,15 @@
+use std::num::NonZeroU32;
+
 use super::{
     voxel_world::{CpuVoxelWorld, GpuVoxelWorld, VoxelData},
     MainPassSettings,
 };
-use crate::render_pipeline::cpu_brickmap::{BRICK_SIZE, Brick};
+use crate::render_pipeline::cpu_brickmap::{Brick, BRICK_SIZE};
 use bevy::{
     prelude::*,
     render::{renderer::RenderQueue, view::ExtractedView, RenderApp, RenderSet},
 };
+use wgpu::ImageCopyTexture;
 
 pub const BRICK_OFFSET: u32 = 1 << 31;
 
@@ -149,35 +152,35 @@ fn voxel_streaming_system(
                     &cpu_brick.get_bitmask(),
                 );
 
-                // let dim = gpu_voxel_world.brick_texture_size / BRICK_SIZE;
-                // let brick_pos = UVec3::new(
-                //     brick_index.unwrap() as u32 / (dim.x * dim.y),
-                //     brick_index.unwrap() as u32 / dim.x % dim.y,
-                //     brick_index.unwrap() as u32 % dim.x,
-                // ) * BRICK_SIZE;
-                // render_queue.write_texture(
-                //     ImageCopyTexture {
-                //         texture: &voxel_data.bricks,
-                //         origin: wgpu::Origin3d {
-                //             x: brick_pos.x,
-                //             y: brick_pos.y,
-                //             z: brick_pos.z,
-                //         },
-                //         mip_level: 0,
-                //         aspect: wgpu::TextureAspect::All,
-                //     },
-                //     cpu_brick.to_gpu(),
-                //     wgpu::ImageDataLayout {
-                //         offset: 0,
-                //         bytes_per_row: Some(NonZeroU32::new(BRICK_SIZE * 4).unwrap()),
-                //         rows_per_image: Some(NonZeroU32::new(BRICK_SIZE).unwrap()),
-                //     },
-                //     wgpu::Extent3d {
-                //         width: BRICK_SIZE,
-                //         height: BRICK_SIZE,
-                //         depth_or_array_layers: BRICK_SIZE,
-                //     },
-                // );
+                let dim = gpu_voxel_world.color_texture_size / BRICK_SIZE;
+                let brick_pos = UVec3::new(
+                    brick_index.unwrap() as u32 / (dim.x * dim.y),
+                    brick_index.unwrap() as u32 / dim.x % dim.y,
+                    brick_index.unwrap() as u32 % dim.x,
+                ) * BRICK_SIZE;
+                render_queue.write_texture(
+                    ImageCopyTexture {
+                        texture: &voxel_data.color,
+                        origin: wgpu::Origin3d {
+                            x: brick_pos.x,
+                            y: brick_pos.y,
+                            z: brick_pos.z,
+                        },
+                        mip_level: 0,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    unsafe { cpu_brick.to_gpu() },
+                    wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(NonZeroU32::new(BRICK_SIZE * 4).unwrap()),
+                        rows_per_image: Some(NonZeroU32::new(BRICK_SIZE).unwrap()),
+                    },
+                    wgpu::Extent3d {
+                        width: BRICK_SIZE,
+                        height: BRICK_SIZE,
+                        depth_or_array_layers: BRICK_SIZE,
+                    },
+                );
 
                 let brick_index = BRICK_OFFSET + brick_index.unwrap() as u32;
                 gpu_voxel_world.brickmap[hole.unwrap() * 8 + i] = brick_index;

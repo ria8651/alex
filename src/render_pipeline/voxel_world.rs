@@ -22,7 +22,7 @@ pub struct GpuVoxelWorld {
     pub brickmap: Vec<u32>,
     pub brickmap_holes: VecDeque<usize>,
     pub brick_holes: VecDeque<usize>,
-    pub brick_texture_size: UVec3,
+    pub color_texture_size: UVec3,
 }
 
 pub struct VoxelWorldPlugin;
@@ -34,7 +34,7 @@ impl Plugin for VoxelWorldPlugin {
 
         // brickmap settings
         let world_depth = 10;
-        let brick_texture_size = UVec3::splat(640);
+        let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 12;
 
         // load world (slooowwww)
@@ -49,7 +49,7 @@ impl Plugin for VoxelWorldPlugin {
             brickmap,
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
             brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
-            brick_texture_size,
+            color_texture_size,
         };
 
         // let (brickmap, bricks) = cpu_brickmap.to_gpu(brick_texture_size);
@@ -82,28 +82,27 @@ impl Plugin for VoxelWorldPlugin {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
-        // bricks
-        // let texture_size = brick_texture_size.x * brick_texture_size.y * brick_texture_size.z;
-        // let bricks = vec![0; 4 * texture_size as usize];
-        // let bricks = render_device.create_texture_with_data(
-        //     render_queue,
-        //     &TextureDescriptor {
-        //         label: None,
-        //         view_formats: &[TextureFormat::Rgba8Unorm],
-        //         size: Extent3d {
-        //             width: brick_texture_size.x,
-        //             height: brick_texture_size.y,
-        //             depth_or_array_layers: brick_texture_size.z,
-        //         },
-        //         mip_level_count: 1,
-        //         sample_count: 1,
-        //         dimension: TextureDimension::D3,
-        //         format: TextureFormat::Rgba8Unorm,
-        //         usage: TextureUsages::STORAGE_BINDING,
-        //     },
-        //     &bricks,
-        // );
-        // let bricks_view = bricks.create_view(&TextureViewDescriptor::default());
+        // color
+        let texture_length = color_texture_size.x * color_texture_size.y * color_texture_size.z;
+        let color = vec![0; 4 * texture_length as usize];
+        let color = render_device.create_texture_with_data(
+            render_queue,
+            &TextureDescriptor {
+                label: None,
+                view_formats: &[TextureFormat::Rgba8Unorm],
+                size: Extent3d {
+                    width: color_texture_size.x,
+                    height: color_texture_size.y,
+                    depth_or_array_layers: color_texture_size.z,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D3,
+                format: TextureFormat::Rgba8Unorm,
+                usage: TextureUsages::STORAGE_BINDING,
+            },
+            &color,
+        );
 
         let bind_group_layout =
             render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -139,16 +138,16 @@ impl Plugin for VoxelWorldPlugin {
                         },
                         count: None,
                     },
-                    // BindGroupLayoutEntry {
-                    //     binding: 2,
-                    //     visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
-                    //     ty: BindingType::StorageTexture {
-                    //         access: StorageTextureAccess::ReadOnly,
-                    //         format: TextureFormat::Rgba8Unorm,
-                    //         view_dimension: TextureViewDimension::D3,
-                    //     },
-                    //     count: None,
-                    // },
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
+                        ty: BindingType::StorageTexture {
+                            access: StorageTextureAccess::ReadOnly,
+                            format: TextureFormat::Rgba8Unorm,
+                            view_dimension: TextureViewDimension::D3,
+                        },
+                        count: None,
+                    },
                 ],
             });
 
@@ -168,10 +167,12 @@ impl Plugin for VoxelWorldPlugin {
                     binding: 2,
                     resource: bricks.as_entire_binding(),
                 },
-                // BindGroupEntry {
-                //     binding: 2,
-                //     resource: BindingResource::TextureView(&bricks_view),
-                // },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindingResource::TextureView(
+                        &color.create_view(&TextureViewDescriptor::default()),
+                    ),
+                },
             ],
         });
 
@@ -181,6 +182,7 @@ impl Plugin for VoxelWorldPlugin {
                 uniform_buffer,
                 brickmap,
                 bricks,
+                color,
                 bind_group_layout,
                 bind_group,
             })
@@ -196,7 +198,7 @@ pub struct VoxelData {
     pub uniform_buffer: UniformBuffer<VoxelUniforms>,
     pub brickmap: Buffer,
     pub bricks: Buffer,
-    // pub bricks: Texture,
+    pub color: Texture,
     pub bind_group_layout: BindGroupLayout,
     pub bind_group: BindGroup,
 }
@@ -237,10 +239,14 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
                 binding: 2,
                 resource: voxel_data.bricks.as_entire_binding(),
             },
-            // BindGroupEntry {
-            //     binding: 2,
-            //     resource: BindingResource::TextureView(&voxel_data.bricks_view),
-            // },
+            BindGroupEntry {
+                binding: 3,
+                resource: BindingResource::TextureView(
+                    &voxel_data
+                        .color
+                        .create_view(&TextureViewDescriptor::default()),
+                ),
+            },
         ],
     });
     voxel_data.bind_group = bind_group;
