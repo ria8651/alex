@@ -34,8 +34,8 @@ impl Plugin for VoxelWorldPlugin {
 
         // brickmap settings
         let world_depth = 12;
-        let color_texture_size = UVec3::splat(768);
-        let brickmap_max_nodes = 1 << 12;
+        let color_texture_size = UVec3::splat(640);
+        let brickmap_max_nodes = 1 << 16;
 
         // load world (slooowwww)
         let path = PathBuf::from("assets/worlds/hermitcraft7");
@@ -44,7 +44,8 @@ impl Plugin for VoxelWorldPlugin {
 
         // setup gpu brickmap
         let brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
-        let brick_count = 8 * brickmap_max_nodes;
+        let dim = color_texture_size / BRICK_SIZE;
+        let brick_count = (dim.x * dim.y * dim.z) as usize;
         let gpu_voxel_world = GpuVoxelWorld {
             brickmap,
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),

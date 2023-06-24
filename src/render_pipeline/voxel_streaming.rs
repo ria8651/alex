@@ -65,7 +65,7 @@ fn voxel_streaming_system(
         }
         if ratio < streaming_ratio - streaming_range {
             nodes_to_cull.push((node_index, pos, depth));
-            return;
+            // return;
         }
 
         for i in 0..8 {
@@ -244,6 +244,12 @@ fn voxel_streaming_system(
     for (index, pos, depth) in nodes_to_cull {
         cull_node(index as usize, pos, depth);
     }
+
+    println!(
+        "{} brick holes, {} node holes",
+        gpu_voxel_world.brickmap_holes.len(),
+        gpu_voxel_world.brickmap_holes.len()
+    );
 
     let (_, data, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
     render_queue.write_buffer(&voxel_data.brickmap, 0, data);

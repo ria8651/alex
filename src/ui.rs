@@ -90,8 +90,9 @@ fn ui_system(
                                 .text("Alpha cutoff"),
                         );
                         ui.add(
-                            Slider::new(&mut trace_settings.streaming_ratio, 0.0..=3.0)
-                                .text("Streaming ratio"),
+                            Slider::new(&mut trace_settings.streaming_ratio, 0.01..=3.0)
+                                .text("Streaming ratio")
+                                .logarithmic(true),
                         );
                         ui.add(
                             Slider::new(&mut trace_settings.streaming_range, 0.0..=1.0)
