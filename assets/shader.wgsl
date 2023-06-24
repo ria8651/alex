@@ -1,6 +1,7 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader
 
 const BRICK_OFFSET: u32 = 2147483648u;
+const COUNTER_BITS: u32 = 32u;
 
 struct VoxelUniforms {
     brick_map_depth: u32,
@@ -26,8 +27,10 @@ var<uniform> voxel_uniforms: VoxelUniforms;
 @group(0) @binding(1)
 var<storage, read> brickmap: array<u32>;
 @group(0) @binding(2)
-var<storage, read> bricks: array<u32>;
+var<storage, read_write> counters: array<u32>;
 @group(0) @binding(3)
+var<storage, read> bricks: array<u32>;
+@group(0) @binding(4)
 var color_texture: texture_storage_3d<rgba8unorm, read>;
 
 @group(1) @binding(0)
@@ -68,9 +71,10 @@ struct Brick {
     index: u32,
     pos: vec3<i32>,
     depth: u32,
+    node_index: u32,
 }
 
-fn find_brick(pos: vec3<i32>) -> Brick {
+fn find_brick(pos: vec3<i32>, count: bool) -> Brick {
     var node_index = 0u;
     var node_pos = vec3(0);
     var depth = 1u;
@@ -82,15 +86,20 @@ fn find_brick(pos: vec3<i32>) -> Brick {
         let child_index = mask.x * 4 + mask.y * 2 + mask.z;
         let new_node_index = node_index + u32(child_index);
         let new_node = brickmap[new_node_index];
+
+        if count {
+            counters[new_node_index] += 1u;
+        }
+
         if new_node >= BRICK_OFFSET {
-            return Brick(new_node - BRICK_OFFSET, node_pos, depth);
+            return Brick(new_node - BRICK_OFFSET, node_pos, depth, new_node_index);
         }
 
         depth = depth + 1u;
         node_index = 8u * new_node;
     }
 
-    return Brick(0u, vec3(0), 0u);
+    return Brick(0u, vec3(0), 0u, 0u);
 }
 
 // maps a point form the -1 to 1 cube to a point in the cube l to u
@@ -152,9 +161,9 @@ fn shoot_ray(r: Ray) -> HitInfo {
     var r_sign = sign(dir);
     var tcpotr = pos - vec3(0.00004); // the current position of the ray
     var steps = 1u;
-    var brick = Brick(0u, vec3(0), 0u);
+    var brick = Brick(0u, vec3(0), 0u, 0u);
     while steps < 500u {
-        brick = find_brick(vec3<i32>(tcpotr));
+        brick = find_brick(vec3<i32>(tcpotr), true);
 
         if brick.index > 0u {
             // step through the brick using dda
@@ -211,7 +220,8 @@ fn shoot_ray(r: Ray) -> HitInfo {
                     ) * brick_size;
                     let col = textureLoad(color_texture, brick_pos_in_texture + vec3<i32>(pos_in_brick * f32(brick_size)));
 
-                    return HitInfo(true, Voxel(col, voxel_pos, half_size), world_pos, normal, steps);
+                    let counter_value = f32(counters[brick.node_index]) / 10000.0;
+                    return HitInfo(true, Voxel(vec4(counter_value), voxel_pos, half_size), world_pos, normal, steps);
                 }
 
                 let rounded_pos = floor(pos_in_brick * f32(size)) / f32(size);
@@ -276,7 +286,7 @@ fn check_voxel(p: vec3<f32>) -> f32 {
         return 0.0;
     }
 
-    let brick = find_brick(vec3<i32>(pos));
+    let brick = find_brick(vec3<i32>(pos), false);
     if brick.index == 0u {
         return 0.0;
     }

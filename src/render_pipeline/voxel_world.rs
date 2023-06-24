@@ -1,5 +1,5 @@
 use super::{
-    cpu_brickmap::{Brick, CpuBrickmap, BRICK_SIZE},
+    cpu_brickmap::{Brick, CpuBrickmap, BRICK_SIZE, COUNTER_BITS},
     load_anvil::load_anvil,
     voxel_streaming::BRICK_OFFSET,
 };
@@ -33,7 +33,7 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 12;
+        let world_depth = 9;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
@@ -66,6 +66,14 @@ impl Plugin for VoxelWorldPlugin {
         let (_, brickmap, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
         let brickmap = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: brickmap,
+            label: None,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        // counters
+        let counters = vec![0; brickmap_max_nodes * COUNTER_BITS]; // * 8 / 8
+        let counters = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            contents: &counters,
             label: None,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
@@ -128,6 +136,16 @@ impl Plugin for VoxelWorldPlugin {
                         binding: 2,
                         visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
                         ty: BindingType::Buffer {
+                            ty: BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: BufferSize::new(4),
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
                             ty: BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: BufferSize::new(512),
@@ -135,7 +153,7 @@ impl Plugin for VoxelWorldPlugin {
                         count: None,
                     },
                     BindGroupLayoutEntry {
-                        binding: 3,
+                        binding: 4,
                         visibility: ShaderStages::FRAGMENT | ShaderStages::COMPUTE,
                         ty: BindingType::StorageTexture {
                             access: StorageTextureAccess::ReadOnly,
@@ -161,10 +179,14 @@ impl Plugin for VoxelWorldPlugin {
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: bricks.as_entire_binding(),
+                    resource: counters.as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 3,
+                    resource: bricks.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 4,
                     resource: BindingResource::TextureView(
                         &color.create_view(&TextureViewDescriptor::default()),
                     ),
@@ -177,6 +199,7 @@ impl Plugin for VoxelWorldPlugin {
             .insert_resource(VoxelData {
                 uniform_buffer,
                 brickmap,
+                counters,
                 bricks,
                 color,
                 bind_group_layout,
@@ -193,6 +216,7 @@ impl Plugin for VoxelWorldPlugin {
 pub struct VoxelData {
     pub uniform_buffer: UniformBuffer<VoxelUniforms>,
     pub brickmap: Buffer,
+    pub counters: Buffer,
     pub bricks: Buffer,
     pub color: Texture,
     pub bind_group_layout: BindGroupLayout,
@@ -233,10 +257,14 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             },
             BindGroupEntry {
                 binding: 2,
-                resource: voxel_data.bricks.as_entire_binding(),
+                resource: voxel_data.counters.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: 3,
+                resource: voxel_data.bricks.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 4,
                 resource: BindingResource::TextureView(
                     &voxel_data
                         .color

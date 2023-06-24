@@ -245,11 +245,11 @@ fn voxel_streaming_system(
         cull_node(index as usize, pos, depth);
     }
 
-    println!(
-        "{} brick holes, {} node holes",
-        gpu_voxel_world.brickmap_holes.len(),
-        gpu_voxel_world.brickmap_holes.len()
-    );
+    // println!(
+    //     "{} brick holes, {} node holes",
+    //     gpu_voxel_world.brickmap_holes.len(),
+    //     gpu_voxel_world.brickmap_holes.len()
+    // );
 
     let (_, data, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
     render_queue.write_buffer(&voxel_data.brickmap, 0, data);
