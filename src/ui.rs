@@ -9,7 +9,7 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bevy_egui::{
-    egui::{self, DragValue, Slider},
+    egui::{self, DragValue},
     EguiContexts, EguiPlugin,
 };
 use bevy_inspector_egui::{reflect_inspector::ui_for_value, DefaultInspectorConfigPlugin};
@@ -45,96 +45,87 @@ fn ui_system(
     diagnostics: Res<Diagnostics>,
     mut character: Query<(&mut Transform, &mut CharacterEntity)>,
     mut fps_data: ResMut<FpsData>,
-    mut streaming_settings: ResMut<StreamingSettings>,
+    streaming_settings: ResMut<StreamingSettings>,
     type_registry: ResMut<AppTypeRegistry>,
 ) {
     let (mut character, mut character_entity) = character.single_mut();
 
-    egui::Window::new("Settings")
-        .anchor(egui::Align2::RIGHT_TOP, [-5.0, 5.0])
-        .show(contexts.ctx_for_window_mut(window.single()), |ui| {
-            // add a text field to change the speed of the character
-            ui.add(DragValue::new(&mut character_entity.speed));
+    egui::Window::new("Settings").show(contexts.ctx_for_window_mut(window.single()), |ui| {
+        // add a text field to change the speed of the character
+        ui.add(DragValue::new(&mut character_entity.speed));
 
-            if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-                if let Some(measurement) = fps.measurement() {
-                    fps_data.push_back(measurement.value);
-                    if fps_data.len() > 100 {
-                        fps_data.pop_front();
-                    }
-
-                    let average = fps_data.iter().sum::<f64>() / fps_data.len() as f64;
-                    let five_percent = fps_data
-                        .iter()
-                        .take(20)
-                        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                        .unwrap();
-                    let one_percent = fps_data
-                        .iter()
-                        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                        .unwrap();
-
-                    ui.label(format!(
-                        "average {:.0}, 5% {:.0}, 1% {:.0}",
-                        average, five_percent, one_percent
-                    ));
+        if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+            if let Some(measurement) = fps.measurement() {
+                fps_data.push_back(measurement.value);
+                if fps_data.len() > 100 {
+                    fps_data.pop_front();
                 }
+
+                let average = fps_data.iter().sum::<f64>() / fps_data.len() as f64;
+                let five_percent = fps_data
+                    .iter()
+                    .take(20)
+                    .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap();
+                let one_percent = fps_data
+                    .iter()
+                    .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap();
+
+                ui.label(format!(
+                    "average {:.0}, 5% {:.0}, 1% {:.0}",
+                    average, five_percent, one_percent
+                ));
             }
+        }
 
-            let (mut trace_settings, projection) = camera_settings_query.single_mut();
-            let (bloom_settings, tonemapping, _fxaa) = post_camera_settings_query.single_mut();
-            egui::CollapsingHeader::new(format!("Camera Settings"))
-                .default_open(true)
-                .show(ui, |mut ui| {
-                    ui.checkbox(&mut trace_settings.show_ray_steps, "Show ray steps");
-                    ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
-                    ui.checkbox(&mut trace_settings.shadows, "Shadows");
-                    ui.checkbox(&mut trace_settings.misc_bool, "Misc");
-                    ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
-
-                    if let Some(tonemapping) = tonemapping {
+        let (mut trace_settings, projection) = camera_settings_query.single_mut();
+        let (bloom_settings, tonemapping, fxaa) = post_camera_settings_query.single_mut();
+        egui::CollapsingHeader::new(format!("Camera Settings"))
+            .default_open(true)
+            .show(ui, |mut ui| {
+                ui_for_value(trace_settings.as_mut(), &mut ui, &type_registry.read());
+                if let Some(tonemapping) = tonemapping {
+                    ui.push_id(1, |mut ui| {
                         ui_for_value(tonemapping.into_inner(), &mut ui, &type_registry.read());
-                    }
-                    if let Some(bloom_settings) = bloom_settings {
+                    });
+                }
+                if let Some(bloom_settings) = bloom_settings {
+                    ui.push_id(2, |mut ui| {
                         ui_for_value(bloom_settings.into_inner(), &mut ui, &type_registry.read());
-                    }
-                    // if let Some(fxaa) = fxaa {
-                    //     ui_for_value(fxaa.into_inner(), &mut ui, &type_registry.read());
-                    // }
-                    if let Some(projection) = projection {
-                        match projection.into_inner() {
-                            Projection::Orthographic(orthographic_projection) => {
-                                ui.add(
-                                    Slider::new(&mut orthographic_projection.scale, 0.0..=1000.0)
-                                        .text("Orthographic scale"),
-                                );
-                            }
-                            Projection::Perspective(perspective_projection) => {
-                                ui.add(
-                                    Slider::new(&mut perspective_projection.fov, 0.01..=3.0)
-                                        .logarithmic(true)
-                                        .text("Perspective fov"),
-                                );
-                            }
-                        }
-                    }
-                });
+                    });
+                }
+                if let Some(fxaa) = fxaa {
+                    ui.push_id(3, |mut ui| {
+                        ui_for_value(fxaa.into_inner(), &mut ui, &type_registry.read());
+                    });
+                }
+                if let Some(projection) = projection {
+                    ui.push_id(4, |mut ui| {
+                        ui_for_value(projection.into_inner(), &mut ui, &type_registry.read());
+                    });
+                }
+            });
 
-            ui.checkbox(&mut streaming_settings.pause_streaming, "Pause streaming");
-            ui.add(DragValue::new(&mut streaming_settings.streaming_value));
-
-            if ui.button("print pos rot").clicked() {
-                println!("{:?}, {:?}", character.translation, character.rotation);
-            }
-            if ui.button("go to pos1").clicked() {
-                character.translation = Vec3::new(-12.808739, 5.79611, 10.124223);
-                character.rotation =
-                    Quat::from_array([-0.28589484, -0.37392232, -0.12235297, 0.8737712]);
-            }
-            if ui.button("go to pos2").clicked() {
-                character.translation = Vec3::new(-2.7467077, 23.573212, -1.1159008);
-                character.rotation =
-                    Quat::from_array([-0.498245, -0.5017268, -0.49896964, 0.5010505]);
-            }
+        ui.push_id(5, |mut ui| {
+            ui_for_value(
+                streaming_settings.into_inner(),
+                &mut ui,
+                &type_registry.read(),
+            );
         });
+
+        if ui.button("print pos rot").clicked() {
+            println!("{:?}, {:?}", character.translation, character.rotation);
+        }
+        if ui.button("go to pos1").clicked() {
+            character.translation = Vec3::new(-12.808739, 5.79611, 10.124223);
+            character.rotation =
+                Quat::from_array([-0.28589484, -0.37392232, -0.12235297, 0.8737712]);
+        }
+        if ui.button("go to pos2").clicked() {
+            character.translation = Vec3::new(-2.7467077, 23.573212, -1.1159008);
+            character.rotation = Quat::from_array([-0.498245, -0.5017268, -0.49896964, 0.5010505]);
+        }
+    });
 }

@@ -13,7 +13,7 @@ use wgpu::ImageCopyTexture;
 
 pub const BRICK_OFFSET: u32 = 1 << 31;
 
-#[derive(Resource, ExtractResource, Clone)]
+#[derive(Resource, ExtractResource, Clone, Reflect)]
 pub struct StreamingSettings {
     pub pause_streaming: bool,
     pub streaming_value: u32,

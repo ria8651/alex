@@ -10,6 +10,7 @@ use bevy::{
         RenderApp, RenderSet,
     },
 };
+use bevy_inspector_egui::prelude::*;
 pub use node::MainPassNode;
 
 mod node;
@@ -18,7 +19,9 @@ pub struct MainPassPlugin;
 
 impl Plugin for MainPassPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(ExtractComponentPlugin::<MainPassSettings>::default());
+        app.add_plugin(ExtractComponentPlugin::<MainPassSettings>::default())
+            .add_system(update_textures.in_base_set(CoreSet::PostUpdate))
+            .register_type::<MainPassSettings>();
 
         // setup custom render pipeline
         app.sub_app_mut(RenderApp)
@@ -27,18 +30,26 @@ impl Plugin for MainPassPlugin {
     }
 }
 
+#[derive(Component, Deref, DerefMut)]
+struct BeamTexture(Handle<Image>);
+
 #[derive(Resource)]
 struct MainPassPipelineData {
     pipeline_id: CachedRenderPipelineId,
     bind_group_layout: BindGroupLayout,
 }
 
-#[derive(Component, Clone, ExtractComponent)]
+#[derive(Component, Clone, ExtractComponent, Reflect, InspectorOptions)]
+#[reflect(InspectorOptions)]
 pub struct MainPassSettings {
     pub show_ray_steps: bool,
     pub indirect_lighting: bool,
     pub shadows: bool,
+    pub beam_optimization: bool,
+    #[inspector(min = 1)]
+    pub super_pixel_size: u32,
     pub misc_bool: bool,
+    #[inspector(speed = 0.01)]
     pub misc_float: f32,
 }
 
@@ -48,6 +59,8 @@ impl Default for MainPassSettings {
             show_ray_steps: false,
             indirect_lighting: true,
             shadows: true,
+            beam_optimization: true,
+            super_pixel_size: 8,
             misc_bool: false,
             misc_float: 1.0,
         }
@@ -157,6 +170,50 @@ impl FromWorld for MainPassPipelineData {
         MainPassPipelineData {
             pipeline_id,
             bind_group_layout,
+        }
+    }
+}
+
+fn update_textures(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut query: Query<Entity, (With<MainPassSettings>, Without<BeamTexture>)>,
+    mut textures: Query<(&mut BeamTexture, &Camera, &MainPassSettings)>,
+) {
+    for entity in query.iter_mut() {
+        info!("Adding beam texture to {:?}", entity);
+
+        let mut beam_texture = Image::new_fill(
+            Extent3d {
+                width: 100,
+                height: 100,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[0, 230, 0, 255],
+            TextureFormat::Rgba16Float,
+        );
+        beam_texture.texture_descriptor.usage =
+            TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT;
+        let beam_texture = images.add(beam_texture);
+        let beam_texture = BeamTexture(beam_texture);
+
+        commands.entity(entity).insert(beam_texture);
+    }
+
+    for (mut texture, camera, main_pass_settings) in textures.iter_mut() {
+        let size = camera.physical_viewport_size().unwrap() / main_pass_settings.super_pixel_size;
+        let texture = images.get_mut(&mut texture.0).unwrap();
+
+        if size != texture.size().as_uvec2() {
+            info!("Resizing beam texture to ({}, {})", size.x, size.y);
+
+            let size = Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            };
+            texture.resize(size);
         }
     }
 }

@@ -1562,9 +1562,9 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
 name = "fastanvil"
-version = "0.26.3"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e2afe304135ba24b6f5ce3e284df3c9054c86da5af06721343bf970c39ab969"
+checksum = "cfa0829124ed84ad967669d26e8101ef2f927d9f8957ca965f736508afadbf3d"
 dependencies = [
  "bit_field",
  "byteorder",
