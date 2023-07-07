@@ -37,8 +37,8 @@ pub fn load_anvil(region_path: PathBuf, world_depth: u32) -> CpuBrickmap {
     'outer: for region_x in -half_side_length_regions..half_side_length_regions.max(1) {
         for region_z in -half_side_length_regions..half_side_length_regions.max(1) {
             let path = region_path.join(format!("r.{}.{}.mca", region_x, region_z));
-            info!("loading region {}", path.display());
-            if let Ok(file) = std::fs::File::open(path) {
+            if let Ok(file) = std::fs::File::open(path.clone()) {
+                info!("loading region {}", path.display());
                 let mut region = Region::from_stream(file).unwrap();
 
                 for chunk_x in 0..side_length_chunks.min(32) {
@@ -111,6 +111,8 @@ pub fn load_anvil(region_path: PathBuf, world_depth: u32) -> CpuBrickmap {
                         }
                     }
                 }
+            } else {
+                info!("skipping region {}", path.display());
             }
         }
     }

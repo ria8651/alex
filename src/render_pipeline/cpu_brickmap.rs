@@ -270,10 +270,11 @@ impl Brick {
     }
 
     pub fn brick_ints() -> usize {
-        (1..=BRICK_SIZE.trailing_zeros())
+        ((1..=BRICK_SIZE.trailing_zeros())
             .map(|v| (1usize << v).pow(3))
             .sum::<usize>()
-            .div_ceil(32)
+            + 31)
+            / 32
     }
 
     fn size_offset() -> Vec<(u32, usize)> {
