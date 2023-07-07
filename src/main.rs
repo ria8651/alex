@@ -1,5 +1,5 @@
 use bevy::{
-    core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
+    core_pipeline::{bloom::BloomSettings, tonemapping::Tonemapping},
     prelude::*,
     render::{
         camera::{CameraRenderGraph, RenderTarget},
@@ -80,7 +80,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             }),
             ..default()
         },
-        MainPassSettings { ..default() },
+        MainPassSettings::default(),
         CharacterEntity {
             look_at: -character_transform.local_z(),
             ..default()
@@ -103,7 +103,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             ..default()
         },
         BloomSettings::default(),
-        Fxaa::default(),
+        // Fxaa::default(),
     ));
 
     commands.insert_resource(CameraData {

@@ -6,7 +6,6 @@ use bevy::{
     core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
     prelude::*,
-    reflect::TypeRegistryInternal,
     window::PrimaryWindow,
 };
 use bevy_egui::{
@@ -33,18 +32,21 @@ struct FpsData(VecDeque<f64>);
 
 fn ui_system(
     mut contexts: EguiContexts,
-    mut camera_settings_query: Query<(
-        &mut MainPassSettings,
-        Option<&mut BloomSettings>,
-        Option<&mut Tonemapping>,
-        Option<&mut Fxaa>,
-        Option<&mut Projection>,
-    )>,
+    mut camera_settings_query: Query<(&mut MainPassSettings, Option<&mut Projection>)>,
+    mut post_camera_settings_query: Query<
+        (
+            Option<&mut BloomSettings>,
+            Option<&mut Tonemapping>,
+            Option<&mut Fxaa>,
+        ),
+        With<Camera2d>,
+    >,
     window: Query<Entity, With<PrimaryWindow>>,
     diagnostics: Res<Diagnostics>,
     mut character: Query<(&mut Transform, &mut CharacterEntity)>,
     mut fps_data: ResMut<FpsData>,
     mut streaming_settings: ResMut<StreamingSettings>,
+    type_registry: ResMut<AppTypeRegistry>,
 ) {
     let (mut character, mut character_entity) = character.single_mut();
 
@@ -79,50 +81,44 @@ fn ui_system(
                 }
             }
 
-            for (i, (mut trace_settings, bloom_settings, tonemapping, fxaa, projection)) in
-                camera_settings_query.iter_mut().enumerate()
-            {
-                egui::CollapsingHeader::new(format!("Camera Settings {}", i))
-                    .default_open(true)
-                    .show(ui, |mut ui| {
-                        ui.checkbox(&mut trace_settings.show_ray_steps, "Show ray steps");
-                        ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
-                        ui.checkbox(&mut trace_settings.shadows, "Shadows");
-                        ui.checkbox(&mut trace_settings.misc_bool, "Misc");
-                        ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
+            let (mut trace_settings, projection) = camera_settings_query.single_mut();
+            let (bloom_settings, tonemapping, _fxaa) = post_camera_settings_query.single_mut();
+            egui::CollapsingHeader::new(format!("Camera Settings"))
+                .default_open(true)
+                .show(ui, |mut ui| {
+                    ui.checkbox(&mut trace_settings.show_ray_steps, "Show ray steps");
+                    ui.checkbox(&mut trace_settings.indirect_lighting, "Indirect lighting");
+                    ui.checkbox(&mut trace_settings.shadows, "Shadows");
+                    ui.checkbox(&mut trace_settings.misc_bool, "Misc");
+                    ui.add(Slider::new(&mut trace_settings.misc_float, 0.0..=1.0).text("Misc"));
 
-                        let registry = &TypeRegistryInternal::default();
-                        if let Some(tonemapping) = tonemapping {
-                            ui_for_value(tonemapping.into_inner(), &mut ui, registry);
-                        }
-                        if let Some(bloom_settings) = bloom_settings {
-                            ui_for_value(bloom_settings.into_inner(), &mut ui, registry);
-                        }
-                        if let Some(fxaa) = fxaa {
-                            ui_for_value(fxaa.into_inner(), &mut ui, registry);
-                        }
-                        if let Some(projection) = projection {
-                            match projection.into_inner() {
-                                Projection::Orthographic(orthographic_projection) => {
-                                    ui.add(
-                                        Slider::new(
-                                            &mut orthographic_projection.scale,
-                                            0.0..=1000.0,
-                                        )
+                    if let Some(tonemapping) = tonemapping {
+                        ui_for_value(tonemapping.into_inner(), &mut ui, &type_registry.read());
+                    }
+                    if let Some(bloom_settings) = bloom_settings {
+                        ui_for_value(bloom_settings.into_inner(), &mut ui, &type_registry.read());
+                    }
+                    // if let Some(fxaa) = fxaa {
+                    //     ui_for_value(fxaa.into_inner(), &mut ui, &type_registry.read());
+                    // }
+                    if let Some(projection) = projection {
+                        match projection.into_inner() {
+                            Projection::Orthographic(orthographic_projection) => {
+                                ui.add(
+                                    Slider::new(&mut orthographic_projection.scale, 0.0..=1000.0)
                                         .text("Orthographic scale"),
-                                    );
-                                }
-                                Projection::Perspective(perspective_projection) => {
-                                    ui.add(
-                                        Slider::new(&mut perspective_projection.fov, 0.01..=3.0)
-                                            .logarithmic(true)
-                                            .text("Perspective fov"),
-                                    );
-                                }
+                                );
+                            }
+                            Projection::Perspective(perspective_projection) => {
+                                ui.add(
+                                    Slider::new(&mut perspective_projection.fov, 0.01..=3.0)
+                                        .logarithmic(true)
+                                        .text("Perspective fov"),
+                                );
                             }
                         }
-                    });
-            }
+                    }
+                });
 
             ui.checkbox(&mut streaming_settings.pause_streaming, "Pause streaming");
             ui.add(DragValue::new(&mut streaming_settings.streaming_value));

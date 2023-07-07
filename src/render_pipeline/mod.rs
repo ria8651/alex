@@ -4,16 +4,13 @@ use self::{
     voxel_world::VoxelWorldPlugin,
 };
 use bevy::{
-    core_pipeline::{
-        bloom::BloomNode, fxaa::FxaaNode, tonemapping::TonemappingNode, upscaling::UpscalingNode,
-    },
+    core_pipeline::upscaling::UpscalingNode,
     prelude::*,
     render::{
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         render_graph::{RenderGraph, SlotInfo, SlotType},
         RenderApp,
     },
-    ui::UiPassNode,
 };
 pub use {main_pass::MainPassSettings, voxel_streaming::StreamingSettings};
 
@@ -45,29 +42,13 @@ impl Plugin for RenderPlugin {
 
         // render graph
         let main_pass = MainPassNode::new(&mut render_app.world);
-        let bloom = BloomNode::new(&mut render_app.world);
-        let tonemapping = TonemappingNode::new(&mut render_app.world);
-        let fxaa = FxaaNode::new(&mut render_app.world);
-        let ui = UiPassNode::new(&mut render_app.world);
         let upscaling = UpscalingNode::new(&mut render_app.world);
 
         voxel_graph.add_node("main_pass", main_pass);
-        voxel_graph.add_node("bloom", bloom);
-        voxel_graph.add_node("tonemapping", tonemapping);
-        voxel_graph.add_node("fxaa", fxaa);
-        voxel_graph.add_node("ui", ui);
         voxel_graph.add_node("upscaling", upscaling);
         voxel_graph.add_slot_edge(input_node_id, "view_entity", "main_pass", "view");
-        voxel_graph.add_slot_edge(input_node_id, "view_entity", "bloom", "view");
-        voxel_graph.add_slot_edge(input_node_id, "view_entity", "tonemapping", "view");
-        voxel_graph.add_slot_edge(input_node_id, "view_entity", "fxaa", "view");
-        voxel_graph.add_slot_edge(input_node_id, "view_entity", "ui", "view");
         voxel_graph.add_slot_edge(input_node_id, "view_entity", "upscaling", "view");
-        voxel_graph.add_node_edge("main_pass", "bloom");
-        voxel_graph.add_node_edge("bloom", "tonemapping");
-        voxel_graph.add_node_edge("tonemapping", "fxaa");
-        voxel_graph.add_node_edge("fxaa", "ui");
-        voxel_graph.add_node_edge("ui", "upscaling");
+        voxel_graph.add_node_edge("main_pass", "upscaling");
 
         // insert the voxel graph into the main render graph
         let mut graph = render_app.world.resource_mut::<RenderGraph>();
