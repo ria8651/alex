@@ -1,8 +1,12 @@
-use super::{MainPassPipelineData, ViewMainPassUniformBuffer};
+use super::{
+    BeamTexture, DefualtBeamTexture, MainPassPipelineData, MainPassSettings,
+    ViewMainPassUniformBuffer,
+};
 use crate::render_pipeline::{voxel_world::VoxelData, RenderGraphSettings};
 use bevy::{
     prelude::*,
     render::{
+        render_asset::RenderAssets,
         render_graph::{self, SlotInfo, SlotType},
         render_resource::*,
         view::{ExtractedView, ViewTarget},
@@ -10,8 +14,15 @@ use bevy::{
 };
 
 pub struct MainPassNode {
-    query:
-        QueryState<(&'static ViewTarget, &'static ViewMainPassUniformBuffer), With<ExtractedView>>,
+    query: QueryState<
+        (
+            &'static ViewTarget,
+            &'static ViewMainPassUniformBuffer,
+            &'static MainPassSettings,
+            &'static BeamTexture,
+        ),
+        With<ExtractedView>,
+    >,
 }
 
 impl MainPassNode {
@@ -39,22 +50,48 @@ impl render_graph::Node for MainPassNode {
     ) -> Result<(), render_graph::NodeRunError> {
         let view_entity = graph.get_input_entity("view")?;
         let pipeline_cache = world.resource::<PipelineCache>();
-        let voxel_data = world.get_resource::<VoxelData>().unwrap();
-        let pipeline_data = world.get_resource::<MainPassPipelineData>().unwrap();
-        let render_graph_settings = world.get_resource::<RenderGraphSettings>().unwrap();
+        let voxel_data = world.resource::<VoxelData>();
+        let pipeline_data = world.resource::<MainPassPipelineData>();
+        let render_graph_settings = world.resource::<RenderGraphSettings>();
+        let gpu_images = world.resource::<RenderAssets<Image>>();
+        let beam_texture_defualt = world.resource::<DefualtBeamTexture>();
 
         if !render_graph_settings.trace {
             return Ok(());
         }
 
-        let (target, uniform_buffer) = match self.query.get_manual(world, view_entity) {
-            Ok(result) => result,
-            Err(_) => panic!("Voxel camera missing component!"),
-        };
+        let (target, uniform_buffer, main_pass_settings, beam_texture) =
+            match self.query.get_manual(world, view_entity) {
+                Ok(result) => result,
+                Err(_) => panic!("Voxel camera missing component!"),
+            };
+        
+        let beam_texture_filled = *beam_texture.filled.lock().unwrap();
+        if !main_pass_settings.beam_optimization && !beam_texture_filled {
+            *beam_texture.filled.lock().unwrap() = true;
+            return Ok(());
+        }
 
         let trace_pipeline = match pipeline_cache.get_render_pipeline(pipeline_data.pipeline_id) {
             Some(pipeline) => pipeline,
             None => return Ok(()),
+        };
+
+        let (beam_texture, target) = if !beam_texture_filled {
+            *beam_texture.filled.lock().unwrap() = true;
+            (
+                &gpu_images
+                    .get(&beam_texture_defualt)
+                    .unwrap()
+                    .texture_view,
+                &gpu_images.get(&beam_texture.image).unwrap().texture_view,
+            )
+        } else {
+            *beam_texture.filled.lock().unwrap() = false;
+            (
+                &gpu_images.get(&beam_texture.image).unwrap().texture_view,
+                target.main_texture(),
+            )
         };
 
         let bind_group = render_context
@@ -62,16 +99,22 @@ impl render_graph::Node for MainPassNode {
             .create_bind_group(&BindGroupDescriptor {
                 label: Some("main pass bind group"),
                 layout: &pipeline_data.bind_group_layout,
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.binding().unwrap(),
-                }],
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buffer.binding().unwrap(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::TextureView(&beam_texture),
+                    },
+                ],
             });
 
         let render_pass_descriptor = RenderPassDescriptor {
             label: Some("main pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
-                view: target.main_texture(),
+                view: &target,
                 resolve_target: None,
                 ops: Operations {
                     load: LoadOp::Load,

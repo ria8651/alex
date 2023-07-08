@@ -16,8 +16,7 @@ struct MainPassUniforms {
     show_ray_steps: u32,
     indirect_lighting: u32,
     shadows: u32,
-    show_brick_texture: u32,
-    alpha_cutoff: f32,
+    super_pixel_size: u32,
     misc_bool: u32,
     misc_float: f32,
 };
@@ -35,6 +34,8 @@ var color_texture: texture_storage_3d<rgba8unorm, read>;
 
 @group(1) @binding(0)
 var<uniform> uniforms: MainPassUniforms;
+@group(1) @binding(1)
+var beam_texture: texture_storage_2d<rgba16float, read>;
 
 struct Ray {
     pos: vec3<f32>,
@@ -142,10 +143,11 @@ fn in_bounds(v: vec3<f32>) -> bool {
     return !(any(v < vec3(0.0)) || any(v >= vec3(f32(1u << voxel_uniforms.brick_map_depth))));
 }
 
-fn shoot_ray(r: Ray) -> HitInfo {
+fn shoot_ray(r: Ray, maximum_ratio: f32) -> HitInfo {
     var pos = r.pos + f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
     var dir = r.dir;
     var normal = vec3<f32>(0.0);
+    let ray_origin = pos;
 
     if !in_bounds(pos) {
         let ray_box = ray_box_dist(Ray(pos, dir), vec3(0.0), vec3(f32(1u << voxel_uniforms.brick_map_depth)));
@@ -203,7 +205,12 @@ fn shoot_ray(r: Ray) -> HitInfo {
                     size = 2;
                 }
 
-                if bit_0 != 0u {
+                // beam optimization
+                let ray_length = length(ray_origin - tcpotr + (initial_pos_in_brick - pos_in_brick) * annoying_factor);
+                let ray_size = ray_length * maximum_ratio;
+                let voxel_size = annoying_factor / f32(size);
+
+                if bit_0 != 0u || voxel_size < ray_size {
                     // get world space pos of the hit
                     let world_pos = vec3<f32>(brick.pos) + (pos_in_brick + normal * 0.0001) * annoying_factor - f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
 
@@ -212,13 +219,16 @@ fn shoot_ray(r: Ray) -> HitInfo {
                     let voxel_pos = (floor(pos_in_brick * f32(brick_size)) + 0.5) / f32(brick_size) * annoying_factor + vec3<f32>(brick.pos) - f32(1u << voxel_uniforms.brick_map_depth) / 2.0;
 
                     // get color of the voxel
-                    let dim = textureDimensions(color_texture) / brick_size;
-                    let brick_pos_in_texture = vec3(
-                        i32(brick.index) / (dim.z * dim.y),
-                        (i32(brick.index) / dim.z) % dim.y,
-                        i32(brick.index) % dim.z,
-                    ) * brick_size;
-                    let col = textureLoad(color_texture, brick_pos_in_texture + vec3<i32>(pos_in_brick * f32(brick_size)));
+                    var col = vec4(1.0);
+                    if maximum_ratio == 0.0 {
+                        let dim = textureDimensions(color_texture) / brick_size;
+                        let brick_pos_in_texture = vec3(
+                            i32(brick.index) / (dim.z * dim.y),
+                            (i32(brick.index) / dim.z) % dim.y,
+                            i32(brick.index) % dim.z,
+                        ) * brick_size;
+                        col = textureLoad(color_texture, brick_pos_in_texture + vec3<i32>(pos_in_brick * f32(brick_size)));
+                    }
 
                     // let counter_value = f32(counters[brick.node_index]) / 100.0;
                     return HitInfo(true, Voxel(vec4(col), voxel_pos, half_size), world_pos, normal, steps);
@@ -273,7 +283,7 @@ fn calculate_direct(material: vec4<f32>, pos: vec3<f32>, normal: vec3<f32>) -> v
     var shadow = 1.0;
     if uniforms.shadows != 0u {
         let shadow_ray = Ray(pos, -light_dir);
-        let shadow_hit = shoot_ray(shadow_ray);
+        let shadow_hit = shoot_ray(shadow_ray, 0.0);
         shadow = f32(!shadow_hit.hit);
     }
 
@@ -335,38 +345,66 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let dir = normalize(dir4.xyz / dir4.w - pos);
     var ray = Ray(pos, dir);
 
-    let hit = shoot_ray(ray);
-    if hit.hit {
-        // direct lighting
-        let direct_lighting = calculate_direct(hit.voxel.col, hit.pos, hit.normal);
+    // beam optimization
+    let beam_texture_size = textureDimensions(beam_texture);
+    if all(beam_texture_size > vec2(1)) {
+        let beam_texture_pos = in.uv * vec2<f32>(beam_texture_size) - 0.5;
+        let dist1 = textureLoad(beam_texture, vec2<i32>(beam_texture_pos) + vec2(0, 0)).r;
+        let dist2 = textureLoad(beam_texture, vec2<i32>(beam_texture_pos) + vec2(0, 1)).r;
+        let dist3 = textureLoad(beam_texture, vec2<i32>(beam_texture_pos) + vec2(1, 1)).r;
+        let dist4 = textureLoad(beam_texture, vec2<i32>(beam_texture_pos) + vec2(1, 0)).r;
+        let dist = min(min(dist1, dist2), min(dist3, dist4));
+        let offset = dist * 1.5 / f32(beam_texture_size.x);
+        ray.pos += ray.dir * max((dist - offset), 0.0);
 
-        // aproximate indirect with ambient and voxel ao
-        var indirect_lighting = vec3(0.3);
-        if uniforms.indirect_lighting != 0u {
-            let offset = hit.normal * hit.voxel.half_size;
-            let ao = voxel_ao(hit.voxel.pos + offset, offset.zxy, offset.yzx);
-            let uv = glmod(
-                vec2(
-                    dot(hit.normal * hit.pos.yzx, vec3(1.0)),
-                    dot(hit.normal * hit.pos.zxy, vec3(1.0))
-                ),
-                vec2(hit.voxel.half_size)
-            ) / (hit.voxel.half_size);
+        let hit = shoot_ray(ray, 0.0);
+        if hit.hit {
+            // direct lighting
+            let direct_lighting = calculate_direct(hit.voxel.col, hit.pos, hit.normal);
 
-            var interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
-            interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
+            // aproximate indirect with ambient and voxel ao
+            var indirect_lighting = vec3(0.3);
+            if uniforms.indirect_lighting != 0u {
+                let offset = hit.normal * hit.voxel.half_size;
+                let ao = voxel_ao(hit.voxel.pos + offset, offset.zxy, offset.yzx);
+                let uv = glmod(
+                    vec2(
+                        dot(hit.normal * hit.pos.yzx, vec3(1.0)),
+                        dot(hit.normal * hit.pos.zxy, vec3(1.0))
+                    ),
+                    vec2(hit.voxel.half_size)
+                ) / (hit.voxel.half_size);
 
-            indirect_lighting = vec3(interpolated_ao * 0.3);
+                var interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
+                interpolated_ao = pow(interpolated_ao, 1.0 / 3.0);
+
+                indirect_lighting = vec3(interpolated_ao * 0.3);
+            }
+
+            // final blend
+            output_colour = (direct_lighting + indirect_lighting) * hit.voxel.col.rgb;
+        } else {
+            output_colour = vec3(0.2);
         }
 
-        // final blend
-        output_colour = (direct_lighting + indirect_lighting) * hit.voxel.col.rgb;
-    } else {
-        output_colour = vec3(0.2);
-    }
+        // let posawoeigh = in.uv * vec2<f32>(beam_texture_size);
+        // output_colour = textureLoad(beam_texture, vec2<i32>(posawoeigh)).rgb;
 
-    if uniforms.show_ray_steps != 0u {
-        output_colour = vec3(f32(hit.steps) / 100.0);
+        if uniforms.show_ray_steps != 0u {
+            // output_colour = vec3(f32(hit.steps) / 100.0);
+            let v = min(f32(hit.steps) / 200.0, 0.3);
+            output_colour = 0.6 - 0.6 * cos(6.3 * 2.0 * v + vec3(0.0, 23.0, 21.0));
+        }
+    } else {
+        let maximum_ratio = 0.02 / f32(beam_texture_size.x);
+        let hit = shoot_ray(ray, maximum_ratio);
+        if hit.hit {
+            output_colour = vec3(length(hit.pos - pos));
+            // output_colour = hit.voxel.col.rgb;
+        } else {
+            output_colour = vec3(10000000.0);
+            // output_colour = vec3(0.2);
+        }
     }
 
     output_colour = max(output_colour, vec3(0.0));

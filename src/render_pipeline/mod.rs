@@ -41,13 +41,17 @@ impl Plugin for RenderPlugin {
             voxel_graph.set_input(vec![SlotInfo::new("view_entity", SlotType::Entity)]);
 
         // render graph
+        let beam_pass = MainPassNode::new(&mut render_app.world);
         let main_pass = MainPassNode::new(&mut render_app.world);
         let upscaling = UpscalingNode::new(&mut render_app.world);
 
+        voxel_graph.add_node("beam_pass", beam_pass);
         voxel_graph.add_node("main_pass", main_pass);
         voxel_graph.add_node("upscaling", upscaling);
+        voxel_graph.add_slot_edge(input_node_id, "view_entity", "beam_pass", "view");
         voxel_graph.add_slot_edge(input_node_id, "view_entity", "main_pass", "view");
         voxel_graph.add_slot_edge(input_node_id, "view_entity", "upscaling", "view");
+        voxel_graph.add_node_edge("beam_pass", "main_pass");
         voxel_graph.add_node_edge("main_pass", "upscaling");
 
         // insert the voxel graph into the main render graph

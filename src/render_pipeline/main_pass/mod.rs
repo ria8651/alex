@@ -1,9 +1,12 @@
+use std::sync::{Arc, Mutex};
+
 use super::voxel_world::VoxelData;
 use bevy::{
     core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
+        extract_resource::{ExtractResource, ExtractResourcePlugin},
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
         view::{ExtractedView, ViewTarget},
@@ -20,6 +23,9 @@ pub struct MainPassPlugin;
 impl Plugin for MainPassPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(ExtractComponentPlugin::<MainPassSettings>::default())
+            .add_plugin(ExtractComponentPlugin::<BeamTexture>::default())
+            .add_plugin(ExtractResourcePlugin::<DefualtBeamTexture>::default())
+            .init_resource::<DefualtBeamTexture>()
             .add_system(update_textures.in_base_set(CoreSet::PostUpdate))
             .register_type::<MainPassSettings>();
 
@@ -30,8 +36,14 @@ impl Plugin for MainPassPlugin {
     }
 }
 
-#[derive(Component, Deref, DerefMut)]
-struct BeamTexture(Handle<Image>);
+#[derive(Component, ExtractComponent, Clone)]
+struct BeamTexture {
+    image: Handle<Image>,
+    filled: Arc<Mutex<bool>>,
+}
+
+#[derive(Resource, ExtractResource, Clone, Deref, DerefMut)]
+struct DefualtBeamTexture(Handle<Image>);
 
 #[derive(Resource)]
 struct MainPassPipelineData {
@@ -68,19 +80,20 @@ impl Default for MainPassSettings {
 }
 
 #[derive(Clone, ShaderType)]
-pub struct TraceUniforms {
-    pub camera: Mat4,
-    pub camera_inverse: Mat4,
-    pub time: f32,
-    pub show_ray_steps: u32,
-    pub indirect_lighting: u32,
-    pub shadows: u32,
-    pub misc_bool: u32,
-    pub misc_float: f32,
+struct MainPassUniforms {
+    camera: Mat4,
+    camera_inverse: Mat4,
+    time: f32,
+    show_ray_steps: u32,
+    indirect_lighting: u32,
+    shadows: u32,
+    super_pixel_size: u32,
+    misc_bool: u32,
+    misc_float: f32,
 }
 
 #[derive(Component, Deref, DerefMut)]
-struct ViewMainPassUniformBuffer(UniformBuffer<TraceUniforms>);
+struct ViewMainPassUniformBuffer(UniformBuffer<MainPassUniforms>);
 
 fn prepare_uniforms(
     mut commands: Commands,
@@ -100,13 +113,14 @@ fn prepare_uniforms(
         let camera = projection * inverse_view;
         let camera_inverse = view * inverse_projection;
 
-        let uniforms = TraceUniforms {
+        let uniforms = MainPassUniforms {
             camera,
             camera_inverse,
             time: elapsed as f32,
             show_ray_steps: settings.show_ray_steps as u32,
             indirect_lighting: settings.indirect_lighting as u32,
             shadows: settings.shadows as u32,
+            super_pixel_size: settings.super_pixel_size,
             misc_bool: settings.misc_bool as u32,
             misc_float: settings.misc_float,
         };
@@ -130,16 +144,28 @@ impl FromWorld for MainPassPipelineData {
             .resource::<RenderDevice>()
             .create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("trace bind group layout"),
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: BufferSize::new(TraceUniforms::SHADER_SIZE.into()),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: BufferSize::new(MainPassUniforms::SHADER_SIZE.into()),
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::StorageTexture {
+                            access: StorageTextureAccess::ReadOnly,
+                            format: TextureFormat::Rgba16Float,
+                            view_dimension: TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
         let trace_shader = asset_server.load("shader.wgsl");
@@ -194,16 +220,19 @@ fn update_textures(
             TextureFormat::Rgba16Float,
         );
         beam_texture.texture_descriptor.usage =
-            TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT;
+            TextureUsages::RENDER_ATTACHMENT | TextureUsages::STORAGE_BINDING;
         let beam_texture = images.add(beam_texture);
-        let beam_texture = BeamTexture(beam_texture);
+        let beam_texture = BeamTexture {
+            image: beam_texture,
+            filled: Arc::new(Mutex::new(false)),
+        };
 
         commands.entity(entity).insert(beam_texture);
     }
 
     for (mut texture, camera, main_pass_settings) in textures.iter_mut() {
         let size = camera.physical_viewport_size().unwrap() / main_pass_settings.super_pixel_size;
-        let texture = images.get_mut(&mut texture.0).unwrap();
+        let texture = images.get_mut(&mut texture.image).unwrap();
 
         if size != texture.size().as_uvec2() {
             info!("Resizing beam texture to ({}, {})", size.x, size.y);
@@ -215,5 +244,27 @@ fn update_textures(
             };
             texture.resize(size);
         }
+    }
+}
+
+impl FromWorld for DefualtBeamTexture {
+    fn from_world(world: &mut World) -> Self {
+        let mut images = world.get_resource_mut::<Assets<Image>>().unwrap();
+
+        let mut defualt_texture = Image::new_fill(
+            Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[255, 255, 255, 255],
+            TextureFormat::Rgba16Float,
+        );
+        defualt_texture.texture_descriptor.usage =
+            TextureUsages::RENDER_ATTACHMENT | TextureUsages::STORAGE_BINDING;
+        let defualt_texture = images.add(defualt_texture);
+
+        DefualtBeamTexture(defualt_texture)
     }
 }
