@@ -64,6 +64,7 @@ fn voxel_streaming_system(
     let mut nodes_to_divide = Vec::new();
     let mut nodes_to_cull = Vec::new();
 
+    // this looks slow but it's actually pretty fast
     for (index, node_counter) in result.iter().enumerate() {
         if *node_counter > streaming_settings.streaming_value {
             if gpu_voxel_world.brickmap[index] > BRICK_OFFSET {
@@ -174,9 +175,11 @@ fn voxel_streaming_system(
         gpu_voxel_world.brickmap[index] = hole.unwrap() as u32;
     };
 
+    let my_span = info_span!("division").entered();
     for index in nodes_to_divide {
         divide_node(index);
     }
+    drop(my_span);
 
     // culling
     let mut cull_node = |index: usize| {
@@ -211,9 +214,11 @@ fn voxel_streaming_system(
         gpu_voxel_world.brickmap_holes.push_back(children_index / 8);
     };
 
+    let my_span = info_span!("culling").entered();
     for index in nodes_to_cull {
         cull_node(index);
     }
+    drop(my_span);
 
     // println!(
     //     "{} brick holes, {} node holes",
