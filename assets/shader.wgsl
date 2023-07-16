@@ -1,4 +1,4 @@
-#import bevy_core_pipeline::fullscreen_vertex_shader
+#import bevy_core_pipeline::fullscreen_vertex_shader FullscreenVertexOutput
 
 const BRICK_OFFSET: u32 = 2147483648u;
 const COUNTER_BITS: u32 = 32u;
@@ -221,7 +221,7 @@ fn shoot_ray(r: Ray, maximum_ratio: f32) -> HitInfo {
                     // get color of the voxel
                     var col = vec4(1.0);
                     if maximum_ratio == 0.0 {
-                        let dim = textureDimensions(color_texture) / brick_size;
+                        let dim = vec3<i32>(textureDimensions(color_texture)) / brick_size;
                         let brick_pos_in_texture = vec3(
                             i32(brick.index) / (dim.z * dim.y),
                             (i32(brick.index) / dim.z) % dim.y,
@@ -347,7 +347,7 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
 
     // beam optimization
     let beam_texture_size = textureDimensions(beam_texture);
-    if all(beam_texture_size > vec2(1)) {
+    if all(beam_texture_size > vec2(1u)) {
         let beam_texture_pos = in.uv * vec2<f32>(beam_texture_size) - 0.5;
         let dist1 = textureLoad(beam_texture, vec2<i32>(beam_texture_pos) + vec2(0, 0)).r;
         let dist2 = textureLoad(beam_texture, vec2<i32>(beam_texture_pos) + vec2(0, 1)).r;

@@ -9,7 +9,7 @@ use bevy::{
         extract_resource::ExtractResource,
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
-        RenderApp, RenderSet,
+        Render, RenderApp, RenderSet,
     },
 };
 use std::{collections::VecDeque, path::PathBuf};
@@ -34,7 +34,7 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 11;
+        let world_depth = 9;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
@@ -214,8 +214,8 @@ impl Plugin for VoxelWorldPlugin {
             })
             .insert_resource(CpuVoxelWorld(cpu_brickmap))
             .insert_resource(gpu_voxel_world)
-            .add_system(prepare_uniforms.in_set(RenderSet::Prepare))
-            .add_system(queue_bind_group.in_set(RenderSet::Queue));
+            .add_systems(Render, prepare_uniforms.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue_bind_group.in_set(RenderSet::Queue));
     }
 }
 

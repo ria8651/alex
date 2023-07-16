@@ -33,8 +33,8 @@ pub struct CharacterPlugin;
 
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_character)
-            .add_system(update_character);
+        app.add_systems(Startup, setup_character)
+            .add_systems(Update, update_character);
     }
 }
 
@@ -99,7 +99,7 @@ fn update_character(
         // movement
         let mut input = Vec3::new(
             (keys.pressed(KeyCode::D) as i32 - keys.pressed(KeyCode::A) as i32) as f32,
-            (keys.pressed(KeyCode::Space) as i32 - keys.pressed(KeyCode::LShift) as i32) as f32,
+            (keys.pressed(KeyCode::Space) as i32 - keys.pressed(KeyCode::ShiftLeft) as i32) as f32,
             (keys.pressed(KeyCode::S) as i32 - keys.pressed(KeyCode::W) as i32) as f32,
         );
         if input != Vec3::ZERO {

@@ -5,10 +5,9 @@ use bevy::{
     render::{
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         renderer::{RenderDevice, RenderQueue},
-        RenderApp, RenderSet,
+        Render, RenderApp, RenderSet,
     },
 };
-use std::num::NonZeroU32;
 use wgpu::ImageCopyTexture;
 
 pub const BRICK_OFFSET: u32 = 1 << 31;
@@ -32,11 +31,11 @@ pub struct VoxelStreamingPlugin;
 
 impl Plugin for VoxelStreamingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(ExtractResourcePlugin::<StreamingSettings>::default())
+        app.add_plugins(ExtractResourcePlugin::<StreamingSettings>::default())
             .insert_resource(StreamingSettings::default());
-        
+
         app.sub_app_mut(RenderApp)
-            .add_system(voxel_streaming_system.in_set(RenderSet::Prepare));
+            .add_systems(Render, voxel_streaming_system.in_set(RenderSet::Prepare));
     }
 }
 
@@ -119,8 +118,8 @@ fn voxel_streaming_system(
                 unsafe { brick.to_gpu() },
                 wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: Some(NonZeroU32::new(BRICK_SIZE * 4).unwrap()),
-                    rows_per_image: Some(NonZeroU32::new(BRICK_SIZE).unwrap()),
+                    bytes_per_row: Some(BRICK_SIZE * 4),
+                    rows_per_image: Some(BRICK_SIZE),
                 },
                 wgpu::Extent3d {
                     width: BRICK_SIZE,

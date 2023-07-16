@@ -10,10 +10,9 @@ use bevy::{
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
         view::{ExtractedView, ViewTarget},
-        RenderApp, RenderSet,
+        Render, RenderApp, RenderSet,
     },
 };
-use bevy_inspector_egui::prelude::*;
 pub use node::MainPassNode;
 
 mod node;
@@ -22,22 +21,21 @@ pub struct MainPassPlugin;
 
 impl Plugin for MainPassPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(ExtractComponentPlugin::<MainPassSettings>::default())
-            .add_plugin(ExtractComponentPlugin::<BeamTexture>::default())
-            .add_plugin(ExtractResourcePlugin::<DefualtBeamTexture>::default())
+        app.add_plugins(ExtractComponentPlugin::<MainPassSettings>::default())
+            .add_plugins(ExtractComponentPlugin::<BeamTexture>::default())
+            .add_plugins(ExtractResourcePlugin::<DefualtBeamTexture>::default())
             .init_resource::<DefualtBeamTexture>()
-            .add_system(update_textures.in_base_set(CoreSet::PostUpdate))
-            .register_type::<MainPassSettings>();
+            .add_systems(PostUpdate, update_textures);
 
         // setup custom render pipeline
         app.sub_app_mut(RenderApp)
             .init_resource::<MainPassPipelineData>()
-            .add_system(prepare_uniforms.in_set(RenderSet::Prepare));
+            .add_systems(Render, prepare_uniforms.in_set(RenderSet::Prepare));
     }
 }
 
 #[derive(Component, ExtractComponent, Clone)]
-struct BeamTexture {
+pub struct BeamTexture {
     image: Handle<Image>,
     filled: Arc<Mutex<bool>>,
 }
@@ -51,17 +49,14 @@ struct MainPassPipelineData {
     bind_group_layout: BindGroupLayout,
 }
 
-#[derive(Component, Clone, ExtractComponent, Reflect, InspectorOptions)]
-#[reflect(InspectorOptions)]
+#[derive(Component, Clone, ExtractComponent)]
 pub struct MainPassSettings {
     pub show_ray_steps: bool,
     pub indirect_lighting: bool,
     pub shadows: bool,
     pub beam_optimization: bool,
-    #[inspector(min = 1)]
     pub super_pixel_size: u32,
     pub misc_bool: bool,
-    #[inspector(speed = 0.01)]
     pub misc_float: f32,
 }
 
@@ -80,7 +75,7 @@ impl Default for MainPassSettings {
 }
 
 #[derive(Clone, ShaderType)]
-struct MainPassUniforms {
+pub struct MainPassUniforms {
     camera: Mat4,
     camera_inverse: Mat4,
     time: f32,
@@ -93,7 +88,7 @@ struct MainPassUniforms {
 }
 
 #[derive(Component, Deref, DerefMut)]
-struct ViewMainPassUniformBuffer(UniformBuffer<MainPassUniforms>);
+pub struct ViewMainPassUniformBuffer(UniformBuffer<MainPassUniforms>);
 
 fn prepare_uniforms(
     mut commands: Commands,

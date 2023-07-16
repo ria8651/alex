@@ -4,51 +4,44 @@ use super::{
 };
 use crate::render_pipeline::{voxel_world::VoxelData, RenderGraphSettings};
 use bevy::{
+    ecs::query::QueryItem,
     prelude::*,
     render::{
         render_asset::RenderAssets,
-        render_graph::{self, SlotInfo, SlotType},
+        render_graph::{self, RenderGraphContext, ViewNode},
         render_resource::*,
-        view::{ExtractedView, ViewTarget},
+        renderer::RenderContext,
+        view::ViewTarget,
     },
 };
 
-pub struct MainPassNode {
-    query: QueryState<
-        (
-            &'static ViewTarget,
-            &'static ViewMainPassUniformBuffer,
-            &'static MainPassSettings,
-            &'static BeamTexture,
-        ),
-        With<ExtractedView>,
-    >,
-}
+#[derive(Default)]
+pub struct MainPassNode;
+//     query: QueryState<
+//         (
+//             &'static ViewTarget,
+//             &'static ViewMainPassUniformBuffer,
+//             &'static MainPassSettings,
+//             &'static BeamTexture,
+//         ),
+//         With<ExtractedView>,
+//     >,
 
-impl MainPassNode {
-    pub fn new(world: &mut World) -> Self {
-        Self {
-            query: world.query_filtered(),
-        }
-    }
-}
-
-impl render_graph::Node for MainPassNode {
-    fn input(&self) -> Vec<SlotInfo> {
-        vec![SlotInfo::new("view", SlotType::Entity)]
-    }
-
-    fn update(&mut self, world: &mut World) {
-        self.query.update_archetypes(world);
-    }
+impl ViewNode for MainPassNode {
+    type ViewQuery = (
+        &'static ViewTarget,
+        &'static ViewMainPassUniformBuffer,
+        &'static MainPassSettings,
+        &'static BeamTexture,
+    );
 
     fn run(
         &self,
-        graph: &mut render_graph::RenderGraphContext,
-        render_context: &mut bevy::render::renderer::RenderContext,
+        _graph: &mut RenderGraphContext,
+        render_context: &mut RenderContext,
+        (target, uniform_buffer, main_pass_settings, beam_texture): QueryItem<Self::ViewQuery>,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
-        let view_entity = graph.get_input_entity("view")?;
         let pipeline_cache = world.resource::<PipelineCache>();
         let voxel_data = world.resource::<VoxelData>();
         let pipeline_data = world.resource::<MainPassPipelineData>();
@@ -60,12 +53,6 @@ impl render_graph::Node for MainPassNode {
             return Ok(());
         }
 
-        let (target, uniform_buffer, main_pass_settings, beam_texture) =
-            match self.query.get_manual(world, view_entity) {
-                Ok(result) => result,
-                Err(_) => panic!("Voxel camera missing component!"),
-            };
-        
         let beam_texture_filled = *beam_texture.filled.lock().unwrap();
         if !main_pass_settings.beam_optimization && !beam_texture_filled {
             *beam_texture.filled.lock().unwrap() = true;
@@ -81,7 +68,7 @@ impl render_graph::Node for MainPassNode {
             *beam_texture.filled.lock().unwrap() = true;
             (
                 &gpu_images
-                    .get(&beam_texture_defualt)
+                    .get(&beam_texture_defualt.0)
                     .unwrap()
                     .texture_view,
                 &gpu_images.get(&beam_texture.image).unwrap().texture_view,
@@ -90,7 +77,7 @@ impl render_graph::Node for MainPassNode {
             *beam_texture.filled.lock().unwrap() = false;
             (
                 &gpu_images.get(&beam_texture.image).unwrap().texture_view,
-                target.main_texture(),
+                target.out_texture(),
             )
         };
 

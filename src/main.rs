@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use bevy::{
+    asset::ChangeWatcher,
     core_pipeline::{bloom::BloomSettings, tonemapping::Tonemapping},
     prelude::*,
     render::{
@@ -12,14 +15,16 @@ use render_pipeline::MainPassSettings;
 
 mod character;
 mod render_pipeline;
-mod ui;
+// mod ui;
 
 fn main() {
     App::new()
         .add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {
-                    watch_for_changes: true,
+                    watch_for_changes: Some(ChangeWatcher {
+                        delay: Duration::from_millis(300),
+                    }),
                     ..default()
                 })
                 .set(WindowPlugin {
@@ -30,11 +35,11 @@ fn main() {
                     ..default()
                 }),
         )
-        .add_plugin(render_pipeline::RenderPlugin)
-        .add_plugin(character::CharacterPlugin)
-        .add_plugin(ui::UiPlugin)
-        .add_startup_system(setup)
-        .add_system(update_render_texture)
+        .add_plugins(render_pipeline::RenderPlugin)
+        .add_plugins(character::CharacterPlugin)
+        // .add_plugins(ui::UiPlugin)
+        .add_systems(Startup, setup)
+        .add_systems(Update, update_render_texture)
         .run();
 }
 
