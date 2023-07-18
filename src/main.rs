@@ -15,7 +15,7 @@ use render_pipeline::MainPassSettings;
 
 mod character;
 mod render_pipeline;
-// mod ui;
+mod ui;
 
 fn main() {
     App::new()
@@ -37,7 +37,7 @@ fn main() {
         )
         .add_plugins(render_pipeline::RenderPlugin)
         .add_plugins(character::CharacterPlugin)
-        // .add_plugins(ui::UiPlugin)
+        .add_plugins(ui::UiPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, update_render_texture)
         .run();

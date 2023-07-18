@@ -4,7 +4,7 @@ use crate::{
 };
 use bevy::{
     core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
-    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
     window::PrimaryWindow,
 };
@@ -19,11 +19,11 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(EguiPlugin)
-            .add_plugin(DefaultInspectorConfigPlugin)
-            .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        app.add_plugins(EguiPlugin)
+            .add_plugins(DefaultInspectorConfigPlugin)
+            .add_plugins(FrameTimeDiagnosticsPlugin)
             .insert_resource(FpsData(VecDeque::new()))
-            .add_system(ui_system);
+            .add_systems(Update, ui_system);
     }
 }
 
@@ -42,7 +42,7 @@ fn ui_system(
         With<Camera2d>,
     >,
     window: Query<Entity, With<PrimaryWindow>>,
-    diagnostics: Res<Diagnostics>,
+    diagnostics: Res<DiagnosticsStore>,
     mut character: Query<(&mut Transform, &mut CharacterEntity)>,
     mut fps_data: ResMut<FpsData>,
     streaming_settings: ResMut<StreamingSettings>,

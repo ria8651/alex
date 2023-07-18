@@ -49,7 +49,7 @@ struct MainPassPipelineData {
     bind_group_layout: BindGroupLayout,
 }
 
-#[derive(Component, Clone, ExtractComponent)]
+#[derive(Component, Clone, ExtractComponent, Reflect)]
 pub struct MainPassSettings {
     pub show_ray_steps: bool,
     pub indirect_lighting: bool,
