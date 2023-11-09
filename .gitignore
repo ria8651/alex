@@ -1,4 +1,5 @@
 /target
+/assets/worlds/*
+!/assets/worlds/imperial_city
 /traces
-/assets/worlds
 trace-*

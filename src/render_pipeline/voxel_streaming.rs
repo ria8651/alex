@@ -22,7 +22,7 @@ impl Default for StreamingSettings {
     fn default() -> Self {
         Self {
             pause_streaming: false,
-            streaming_value: 50,
+            streaming_value: 100,
         }
     }
 }

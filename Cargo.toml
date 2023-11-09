@@ -6,7 +6,15 @@ description = "A massive scale voxel engine"
 repository = "https://github.com/ria8651/alex"
 
 [dependencies]
-bevy = "0.12"
+bevy = { version = "0.12", default-features = false, features = [
+    "bevy_asset",
+    "bevy_winit",
+    "bevy_core_pipeline",
+    "bevy_render",
+    "tonemapping_luts",
+    "bevy_sprite",
+    "multi-threaded",
+] }
 bevy_egui = "0.23"
 fastanvil = "0.30"
 fastnbt = "2.4"

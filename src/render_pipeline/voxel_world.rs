@@ -34,12 +34,12 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 9;
+        let world_depth = 10;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
         // load world (slooowwww)
-        let path = PathBuf::from("assets/worlds/hermitcraft7");
+        let path = PathBuf::from("assets/worlds/imperial_city");
         let mut cpu_brickmap = load_anvil(path, world_depth);
         cpu_brickmap.recreate_mipmaps();
 
