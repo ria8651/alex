@@ -65,7 +65,7 @@ impl Plugin for VoxelWorldPlugin {
         // uniforms
         let voxel_uniforms = VoxelUniforms {
             brickmap_depth: world_depth - BRICK_SIZE.trailing_zeros(),
-            brick_size: BRICK_SIZE.trailing_zeros() as u32,
+            brick_size: BRICK_SIZE.trailing_zeros(),
             brick_ints: Brick::brick_ints() as u32,
         };
         let mut uniform_buffer = UniformBuffer::from(voxel_uniforms.clone());

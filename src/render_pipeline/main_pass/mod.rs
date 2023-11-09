@@ -169,7 +169,7 @@ impl FromWorld for MainPassPipelineData {
 
         let trace_pipeline_descriptor = RenderPipelineDescriptor {
             label: Some("trace pipeline".into()),
-            layout: vec![voxel_bind_group_layout.clone(), bind_group_layout.clone()],
+            layout: vec![voxel_bind_group_layout, bind_group_layout.clone()],
             vertex: fullscreen_shader_vertex_state(),
             fragment: Some(FragmentState {
                 shader: trace_shader,

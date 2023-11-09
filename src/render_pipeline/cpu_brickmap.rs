@@ -43,7 +43,7 @@ impl CpuBrickmap {
         loop {
             let offset = UVec3::splat(1 << (self.brickmap_depth - node_depth));
             let mask = pos.cmpge(node_pos + offset);
-            node_pos = node_pos + UVec3::select(mask, offset, UVec3::ZERO);
+            node_pos += UVec3::select(mask, offset, UVec3::ZERO);
 
             let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
             let index = node_index + child_index;
@@ -85,7 +85,7 @@ impl CpuBrickmap {
         loop {
             let offset = UVec3::splat(1 << (self.brickmap_depth - node_depth));
             let mask = pos.cmpge(node_pos + offset);
-            node_pos = node_pos + UVec3::select(mask, offset, UVec3::ZERO);
+            node_pos += UVec3::select(mask, offset, UVec3::ZERO);
 
             let child_index = mask.x as usize * 4 + mask.y as usize * 2 + mask.z as usize;
             let index = node_index + child_index;
@@ -149,14 +149,14 @@ impl CpuBrickmap {
         info!("recreating mipmaps for {} bricks", self.bricks.len());
 
         // mip-mapping
-        fn recursive_mip(mut brickmap: &mut CpuBrickmap, node_index: usize, depth: u32) {
+        fn recursive_mip(brickmap: &mut CpuBrickmap, node_index: usize, depth: u32) {
             let children_index = 8 * brickmap.brickmap[node_index].children as usize;
             if children_index == 0 {
                 return;
             }
             if depth < brickmap.brickmap_depth - 1 {
                 for i in 0..8 {
-                    recursive_mip(&mut brickmap, children_index + i, depth + 1);
+                    recursive_mip(brickmap, children_index + i, depth + 1);
                 }
             }
 
@@ -181,7 +181,7 @@ impl CpuBrickmap {
                         let mut colour = Vec3::ZERO;
                         let mut total_alpha = 0.0;
                         let mask = pos.cmpge(UVec3::splat(BRICK_SIZE / 2));
-                        let child_node_index = children_index as usize
+                        let child_node_index = children_index
                             + mask.x as usize * 4
                             + mask.y as usize * 2
                             + mask.z as usize;

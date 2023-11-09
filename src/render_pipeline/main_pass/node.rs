@@ -80,7 +80,7 @@ impl ViewNode for MainPassNode {
                 },
                 BindGroupEntry {
                     binding: 1,
-                    resource: BindingResource::TextureView(&beam_texture),
+                    resource: BindingResource::TextureView(beam_texture),
                 },
             ],
         );
@@ -88,7 +88,7 @@ impl ViewNode for MainPassNode {
         let render_pass_descriptor = RenderPassDescriptor {
             label: Some("main pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
-                view: &target,
+                view: target,
                 resolve_target: None,
                 ops: Operations {
                     load: LoadOp::Load,

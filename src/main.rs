@@ -1,10 +1,7 @@
 use bevy::{
     core_pipeline::{bloom::BloomSettings, tonemapping::Tonemapping},
     prelude::*,
-    render::{
-        camera::{CameraRenderGraph, RenderTarget},
-        render_resource::*,
-    },
+    render::{camera::{RenderTarget, CameraRenderGraph}, render_resource::*},
     window::{PrimaryWindow, WindowResized, WindowScaleFactorChanged},
 };
 use character::CharacterEntity;
@@ -56,6 +53,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT;
     let render_texture = images.add(render_texture);
 
+    // add voxel camera with character controller
     let character_transform =
         Transform::from_xyz(21.035963, 19.771912, -31.12883).looking_at(Vec3::ZERO, Vec3::Y);
     commands.spawn((
@@ -83,6 +81,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         },
     ));
 
+    // add sprite and camera to render the render texture
     let sprite = commands
         .spawn(SpriteBundle {
             texture: render_texture.clone(),
@@ -101,7 +100,6 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         BloomSettings::default(),
         // Fxaa::default(),
     ));
-
     commands.insert_resource(CameraData {
         render_texture,
         sprite,

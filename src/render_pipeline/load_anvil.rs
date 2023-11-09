@@ -86,7 +86,7 @@ pub fn load_anvil(region_path: PathBuf, world_depth: u32) -> CpuBrickmap {
                                                         let defualt_col = palette.get("").unwrap();
                                                         let colour = palette
                                                             .get(block_name)
-                                                            .unwrap_or(&defualt_col);
+                                                            .unwrap_or(defualt_col);
 
                                                         let pos = UVec3::new(x, y, z);
                                                         brick.write(pos, *colour);
@@ -96,7 +96,8 @@ pub fn load_anvil(region_path: PathBuf, world_depth: u32) -> CpuBrickmap {
 
                                             match brickmap.place_brick(
                                                 brick,
-                                                chunk_side_length_bricks * pos + UVec3::new(brick_x, brick_y, brick_z),
+                                                chunk_side_length_bricks * pos
+                                                    + UVec3::new(brick_x, brick_y, brick_z),
                                             ) {
                                                 Ok(_) => {}
                                                 Err(e) => {

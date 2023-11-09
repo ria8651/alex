@@ -83,34 +83,34 @@ fn ui_system(
         let (bloom_settings, tonemapping, fxaa) = post_camera_settings_query.single_mut();
         egui::CollapsingHeader::new(format!("Camera Settings"))
             .default_open(true)
-            .show(ui, |mut ui| {
-                ui_for_value(trace_settings.as_mut(), &mut ui, &type_registry.read());
+            .show(ui, |ui| {
+                ui_for_value(trace_settings.as_mut(), ui, &type_registry.read());
                 if let Some(tonemapping) = tonemapping {
-                    ui.push_id(1, |mut ui| {
-                        ui_for_value(tonemapping.into_inner(), &mut ui, &type_registry.read());
+                    ui.push_id(1, |ui| {
+                        ui_for_value(tonemapping.into_inner(), ui, &type_registry.read());
                     });
                 }
                 if let Some(bloom_settings) = bloom_settings {
-                    ui.push_id(2, |mut ui| {
-                        ui_for_value(bloom_settings.into_inner(), &mut ui, &type_registry.read());
+                    ui.push_id(2, |ui| {
+                        ui_for_value(bloom_settings.into_inner(), ui, &type_registry.read());
                     });
                 }
                 if let Some(fxaa) = fxaa {
-                    ui.push_id(3, |mut ui| {
-                        ui_for_value(fxaa.into_inner(), &mut ui, &type_registry.read());
+                    ui.push_id(3, |ui| {
+                        ui_for_value(fxaa.into_inner(), ui, &type_registry.read());
                     });
                 }
                 if let Some(projection) = projection {
-                    ui.push_id(4, |mut ui| {
-                        ui_for_value(projection.into_inner(), &mut ui, &type_registry.read());
+                    ui.push_id(4, |ui| {
+                        ui_for_value(projection.into_inner(), ui, &type_registry.read());
                     });
                 }
             });
 
-        ui.push_id(5, |mut ui| {
+        ui.push_id(5, |ui| {
             ui_for_value(
                 streaming_settings.into_inner(),
-                &mut ui,
+                ui,
                 &type_registry.read(),
             );
         });

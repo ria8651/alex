@@ -65,19 +65,15 @@ fn voxel_streaming_system(
 
     // this looks slow but it's actually pretty fast
     for (index, node_counter) in result.iter().enumerate() {
-        if *node_counter > streaming_settings.streaming_value {
-            if gpu_voxel_world.brickmap[index] > BRICK_OFFSET {
-                let cpu_node_index = gpu_voxel_world.gpu_to_cpu[index] as usize;
-                if cpu_voxel_world.brickmap[cpu_node_index].children != 0 {
-                    nodes_to_divide.push(index);
-                }
+        if *node_counter > streaming_settings.streaming_value && gpu_voxel_world.brickmap[index] > BRICK_OFFSET {
+            let cpu_node_index = gpu_voxel_world.gpu_to_cpu[index] as usize;
+            if cpu_voxel_world.brickmap[cpu_node_index].children != 0 {
+                nodes_to_divide.push(index);
             }
         }
 
-        if *node_counter == 0 {
-            if gpu_voxel_world.brickmap[index] < BRICK_OFFSET {
-                nodes_to_cull.push(index);
-            }
+        if *node_counter == 0 && gpu_voxel_world.brickmap[index] < BRICK_OFFSET {
+            nodes_to_cull.push(index);
         }
     }
 
