@@ -4,8 +4,8 @@
 
 I'm trying to render entire Minecraft worlds on low end GPUs (around M1) using WebGPU and the [bevy game engine](https://github.com/bevyengine/bevy).
 
-## Screenshots
 
+## Screenshots
 
 <img width="100%" alt="large-world" src="https://github.com/ria8651/alex/assets/66388895/e453d701-c976-4979-9b3e-dca77d493269">
 
@@ -13,6 +13,9 @@ Hermit craft season 7 4096x4096:
 
 ![hermit-craft-season-7](https://github.com/ria8651/alex/assets/66388895/7148c23c-5c69-49ed-859f-056b7c9fd0e0)
 
+Beam optimization:
+
+![beam-optimization](https://github.com/ria8651/alex/assets/66388895/1704f258-8491-4ac0-9e52-62e4f6189375)
 
 
 ## License
