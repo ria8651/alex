@@ -29,7 +29,9 @@ pub struct GpuVoxelWorld {
 pub struct VoxelWorldPlugin;
 
 impl Plugin for VoxelWorldPlugin {
-    fn build(&self, app: &mut App) {
+    fn build(&self, _app: &mut App) {}
+
+    fn finish(&self, app: &mut App) {
         let render_device = app.world.resource::<RenderDevice>();
         let render_queue = app.world.resource::<RenderQueue>();
 

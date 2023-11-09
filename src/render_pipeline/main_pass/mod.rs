@@ -23,10 +23,12 @@ impl Plugin for MainPassPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(ExtractComponentPlugin::<MainPassSettings>::default())
             .add_plugins(ExtractComponentPlugin::<BeamTexture>::default())
-            .add_plugins(ExtractResourcePlugin::<DefualtBeamTexture>::default())
-            .init_resource::<DefualtBeamTexture>()
+            .add_plugins(ExtractResourcePlugin::<FallbackBeamTexture>::default())
+            .init_resource::<FallbackBeamTexture>()
             .add_systems(PostUpdate, update_textures);
+    }
 
+    fn finish(&self, app: &mut App) {
         // setup custom render pipeline
         app.sub_app_mut(RenderApp)
             .init_resource::<MainPassPipelineData>()
@@ -41,7 +43,7 @@ pub struct BeamTexture {
 }
 
 #[derive(Resource, ExtractResource, Clone, Deref, DerefMut)]
-struct DefualtBeamTexture(Handle<Image>);
+struct FallbackBeamTexture(Handle<Image>);
 
 #[derive(Resource)]
 struct MainPassPipelineData {
@@ -242,11 +244,11 @@ fn update_textures(
     }
 }
 
-impl FromWorld for DefualtBeamTexture {
+impl FromWorld for FallbackBeamTexture {
     fn from_world(world: &mut World) -> Self {
         let mut images = world.get_resource_mut::<Assets<Image>>().unwrap();
 
-        let mut defualt_texture = Image::new_fill(
+        let mut fallback_texture = Image::new_fill(
             Extent3d {
                 width: 1,
                 height: 1,
@@ -256,10 +258,10 @@ impl FromWorld for DefualtBeamTexture {
             &[255, 255, 255, 255],
             TextureFormat::Rgba16Float,
         );
-        defualt_texture.texture_descriptor.usage =
+        fallback_texture.texture_descriptor.usage =
             TextureUsages::RENDER_ATTACHMENT | TextureUsages::STORAGE_BINDING;
-        let defualt_texture = images.add(defualt_texture);
+        let fallback_texture = images.add(fallback_texture);
 
-        DefualtBeamTexture(defualt_texture)
+        FallbackBeamTexture(fallback_texture)
     }
 }

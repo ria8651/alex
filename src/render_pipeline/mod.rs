@@ -22,15 +22,15 @@ mod voxel_world;
 pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
-    fn build(&self, _app: &mut App) {}
-
-    fn finish(&self, app: &mut App) {
+    fn build(&self, app: &mut App) {
         app.insert_resource(RenderGraphSettings::default())
             .add_plugins(ExtractResourcePlugin::<RenderGraphSettings>::default())
             .add_plugins(VoxelStreamingPlugin)
             .add_plugins(VoxelWorldPlugin)
             .add_plugins(MainPassPlugin);
+    }
 
+    fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
 
         render_app

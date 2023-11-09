@@ -1,5 +1,5 @@
 use super::{
-    BeamTexture, DefualtBeamTexture, MainPassPipelineData, MainPassSettings,
+    BeamTexture, FallbackBeamTexture, MainPassPipelineData, MainPassSettings,
     ViewMainPassUniformBuffer,
 };
 use crate::render_pipeline::{voxel_world::VoxelData, RenderGraphSettings};
@@ -38,7 +38,7 @@ impl ViewNode for MainPassNode {
         let pipeline_data = world.resource::<MainPassPipelineData>();
         let render_graph_settings = world.resource::<RenderGraphSettings>();
         let gpu_images = world.resource::<RenderAssets<Image>>();
-        let beam_texture_defualt = world.resource::<DefualtBeamTexture>();
+        let fallback_beam_texture = world.resource::<FallbackBeamTexture>();
 
         if !render_graph_settings.trace {
             return Ok(());
@@ -55,13 +55,11 @@ impl ViewNode for MainPassNode {
             None => return Ok(()),
         };
 
+        let fallback_image = gpu_images.get(&fallback_beam_texture.0).unwrap();
         let (beam_texture, target) = if !beam_texture_filled {
             *beam_texture.filled.lock().unwrap() = true;
             (
-                &gpu_images
-                    .get(&beam_texture_defualt.0)
-                    .unwrap()
-                    .texture_view,
+                &fallback_image.texture_view,
                 &gpu_images.get(&beam_texture.image).unwrap().texture_view,
             )
         } else {
