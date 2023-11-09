@@ -14,6 +14,7 @@ bevy = { version = "0.12", default-features = false, features = [
     "tonemapping_luts",
     "bevy_sprite",
     "multi-threaded",
+    "wayland"
 ] }
 bevy_egui = "0.23"
 fastanvil = "0.30"

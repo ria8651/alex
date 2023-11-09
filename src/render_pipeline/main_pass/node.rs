@@ -98,6 +98,14 @@ impl ViewNode for MainPassNode {
             depth_stencil_attachment: None,
         };
 
+        render_context.command_encoder().copy_buffer_to_buffer(
+            &voxel_data.counters_gpu,
+            0,
+            &voxel_data.counters_cpu,
+            0,
+            2097152,
+        );
+
         let mut render_pass = render_context
             .command_encoder()
             .begin_render_pass(&render_pass_descriptor);

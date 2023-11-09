@@ -51,7 +51,7 @@ fn voxel_streaming_system(
         return;
     }
 
-    let counter_slice = voxel_data.counters.slice(..);
+    let counter_slice = voxel_data.counters_cpu.slice(..);
     counter_slice.map_async(wgpu::MapMode::Read, |_| {});
     render_device.poll(wgpu::Maintain::Wait);
 
@@ -65,7 +65,9 @@ fn voxel_streaming_system(
 
     // this looks slow but it's actually pretty fast
     for (index, node_counter) in result.iter().enumerate() {
-        if *node_counter > streaming_settings.streaming_value && gpu_voxel_world.brickmap[index] > BRICK_OFFSET {
+        if *node_counter > streaming_settings.streaming_value
+            && gpu_voxel_world.brickmap[index] > BRICK_OFFSET
+        {
             let cpu_node_index = gpu_voxel_world.gpu_to_cpu[index] as usize;
             if cpu_voxel_world.brickmap[cpu_node_index].children != 0 {
                 nodes_to_divide.push(index);
@@ -78,7 +80,7 @@ fn voxel_streaming_system(
     }
 
     drop(data);
-    voxel_data.counters.unmap();
+    voxel_data.counters_cpu.unmap();
 
     let allocate_brick =
         |brick: &Brick, gpu_voxel_world: &mut GpuVoxelWorld| -> Result<usize, ()> {
@@ -225,5 +227,5 @@ fn voxel_streaming_system(
     render_queue.write_buffer(&voxel_data.brickmap, 0, data);
 
     let counters = vec![0; gpu_voxel_world.brickmap.len() * COUNTER_BITS / 8];
-    render_queue.write_buffer(&voxel_data.counters, 0, &counters);
+    render_queue.write_buffer(&voxel_data.counters_gpu, 0, &counters);
 }

@@ -80,11 +80,16 @@ impl Plugin for VoxelWorldPlugin {
         });
 
         // counters
-        let counters = vec![0; brickmap_max_nodes * COUNTER_BITS]; // * 8 / 8
-        let counters = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            contents: &counters,
+        let counters_data = vec![0; brickmap_max_nodes * COUNTER_BITS]; // * 8 / 8
+        let counters_gpu = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            contents: &counters_data,
             label: None,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+        });
+        let counters_cpu = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            contents: &counters_data,
+            label: None,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         });
 
         // bricks
@@ -188,7 +193,7 @@ impl Plugin for VoxelWorldPlugin {
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: counters.as_entire_binding(),
+                    resource: counters_gpu.as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 3,
@@ -208,7 +213,8 @@ impl Plugin for VoxelWorldPlugin {
             .insert_resource(VoxelData {
                 uniform_buffer,
                 brickmap,
-                counters,
+                counters_gpu,
+                counters_cpu,
                 bricks,
                 color,
                 bind_group_layout,
@@ -225,7 +231,8 @@ impl Plugin for VoxelWorldPlugin {
 pub struct VoxelData {
     pub uniform_buffer: UniformBuffer<VoxelUniforms>,
     pub brickmap: Buffer,
-    pub counters: Buffer,
+    pub counters_gpu: Buffer,
+    pub counters_cpu: Buffer,
     pub bricks: Buffer,
     pub color: Texture,
     pub bind_group_layout: BindGroupLayout,
@@ -266,7 +273,7 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             },
             BindGroupEntry {
                 binding: 2,
-                resource: voxel_data.counters.as_entire_binding(),
+                resource: voxel_data.counters_gpu.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: 3,
