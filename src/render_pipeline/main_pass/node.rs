@@ -17,15 +17,6 @@ use bevy::{
 
 #[derive(Default)]
 pub struct MainPassNode;
-//     query: QueryState<
-//         (
-//             &'static ViewTarget,
-//             &'static ViewMainPassUniformBuffer,
-//             &'static MainPassSettings,
-//             &'static BeamTexture,
-//         ),
-//         With<ExtractedView>,
-//     >,
 
 impl ViewNode for MainPassNode {
     type ViewQuery = (
@@ -81,22 +72,20 @@ impl ViewNode for MainPassNode {
             )
         };
 
-        let bind_group = render_context
-            .render_device()
-            .create_bind_group(&BindGroupDescriptor {
-                label: Some("main pass bind group"),
-                layout: &pipeline_data.bind_group_layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.binding().unwrap(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::TextureView(&beam_texture),
-                    },
-                ],
-            });
+        let bind_group = render_context.render_device().create_bind_group(
+            Some("main pass bind group"),
+            &pipeline_data.bind_group_layout,
+            &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.binding().unwrap(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&beam_texture),
+                },
+            ],
+        );
 
         let render_pass_descriptor = RenderPassDescriptor {
             label: Some("main pass"),

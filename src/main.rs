@@ -1,7 +1,4 @@
-use std::time::Duration;
-
 use bevy::{
-    asset::ChangeWatcher,
     core_pipeline::{bloom::BloomSettings, tonemapping::Tonemapping},
     prelude::*,
     render::{
@@ -19,25 +16,18 @@ mod ui;
 
 fn main() {
     App::new()
-        .add_plugins(
-            DefaultPlugins
-                .set(AssetPlugin {
-                    watch_for_changes: Some(ChangeWatcher {
-                        delay: Duration::from_millis(300),
-                    }),
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        resolution: (1920.0, 1080.0).into(),
-                        ..default()
-                    }),
+        .add_plugins((
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    resolution: (1920.0, 1080.0).into(),
                     ..default()
                 }),
-        )
-        .add_plugins(render_pipeline::RenderPlugin)
-        .add_plugins(character::CharacterPlugin)
-        .add_plugins(ui::UiPlugin)
+                ..default()
+            }),
+            render_pipeline::RenderPlugin,
+            character::CharacterPlugin,
+            ui::UiPlugin,
+        ))
         .add_systems(Startup, setup)
         .add_systems(Update, update_render_texture)
         .run();
@@ -51,6 +41,7 @@ struct CameraData {
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    // we use a render texture to downscale the main pass
     let mut render_texture = Image::new_fill(
         Extent3d {
             width: 100,
@@ -136,16 +127,13 @@ fn update_render_texture(
 
         let image = images.get_mut(&render_image.render_texture).unwrap();
         image.resize(new_size);
-
-        // let mut sprite = sprites.get_mut(render_image.sprite).unwrap();
-        // sprite.custom_size = Some(Vec2::new(width, height));
     };
 
-    for _ in resize_reader.iter() {
+    for _ in resize_reader.read() {
         update(window.width(), window.height());
     }
 
-    for _ in scale_factor_reader.iter() {
+    for _ in scale_factor_reader.read() {
         update(window.width(), window.height());
     }
 }

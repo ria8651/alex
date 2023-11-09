@@ -1,4 +1,4 @@
-#import bevy_core_pipeline::fullscreen_vertex_shader FullscreenVertexOutput
+#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput
 
 const BRICK_OFFSET: u32 = 2147483648u;
 const COUNTER_BITS: u32 = 32u;
@@ -391,9 +391,9 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         // output_colour = textureLoad(beam_texture, vec2<i32>(posawoeigh)).rgb;
 
         if uniforms.show_ray_steps != 0u {
-            // output_colour = vec3(f32(hit.steps) / 100.0);
-            let v = min(f32(hit.steps) / 200.0, 0.3);
-            output_colour = 0.6 - 0.6 * cos(6.3 * 2.0 * v + vec3(0.0, 23.0, 21.0));
+            output_colour = vec3(f32(hit.steps) / 100.0);
+            // let v = min(f32(hit.steps) / 200.0, 0.3);
+            // output_colour = 0.6 - 0.6 * cos(6.3 * 2.0 * v + vec3(0.0, 23.0, 21.0));
         }
     } else {
         let maximum_ratio = 0.02 / f32(beam_texture_size.x);

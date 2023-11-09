@@ -199,7 +199,7 @@ fn update_textures(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut query: Query<Entity, (With<MainPassSettings>, Without<BeamTexture>)>,
-    mut textures: Query<(&mut BeamTexture, &Camera, &MainPassSettings)>,
+    textures: Query<(&BeamTexture, &Camera, &MainPassSettings)>,
 ) {
     for entity in query.iter_mut() {
         info!("Adding beam texture to {:?}", entity);
@@ -225,11 +225,11 @@ fn update_textures(
         commands.entity(entity).insert(beam_texture);
     }
 
-    for (mut texture, camera, main_pass_settings) in textures.iter_mut() {
+    for (texture, camera, main_pass_settings) in textures.iter() {
         let size = camera.physical_viewport_size().unwrap() / main_pass_settings.super_pixel_size;
-        let texture = images.get_mut(&mut texture.image).unwrap();
+        let texture = images.get_mut(texture.image.clone()).unwrap();
 
-        if size != texture.size().as_uvec2() {
+        if size != texture.size() {
             info!("Resizing beam texture to ({}, {})", size.x, size.y);
 
             let size = Extent3d {

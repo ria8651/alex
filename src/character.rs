@@ -69,13 +69,13 @@ fn update_character(
     let target_velocity;
     if window.cursor.grab_mode == CursorGrabMode::Locked {
         // speed
-        for event in mouse_wheel_events.iter() {
+        for event in mouse_wheel_events.read() {
             character.speed *= 1.0 + event.y.min(50.0) / 100.0;
         }
 
         // rotation
         let mut mouse_delta = Vec2::new(0.0, 0.0);
-        for event in mouse_motion_events.iter() {
+        for event in mouse_motion_events.read() {
             mouse_delta += event.delta;
         }
         if mouse_delta != Vec2::ZERO {

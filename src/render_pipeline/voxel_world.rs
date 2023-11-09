@@ -172,10 +172,10 @@ impl Plugin for VoxelWorldPlugin {
                 ],
             });
 
-        let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: &bind_group_layout,
-            entries: &[
+        let bind_group = render_device.create_bind_group(
+            Some("voxel bind group"),
+            &bind_group_layout,
+            &[
                 BindGroupEntry {
                     binding: 0,
                     resource: uniform_buffer.binding().unwrap(),
@@ -199,7 +199,7 @@ impl Plugin for VoxelWorldPlugin {
                     ),
                 },
             ],
-        });
+        );
 
         app.sub_app_mut(RenderApp)
             .insert_resource(voxel_uniforms)
@@ -250,10 +250,10 @@ fn prepare_uniforms(
 }
 
 fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<VoxelData>) {
-    let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
-        label: None,
-        layout: &voxel_data.bind_group_layout,
-        entries: &[
+    let bind_group = render_device.create_bind_group(
+        Some("voxel bind group"),
+        &voxel_data.bind_group_layout,
+        &[
             BindGroupEntry {
                 binding: 0,
                 resource: voxel_data.uniform_buffer.binding().unwrap(),
@@ -279,6 +279,6 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
                 ),
             },
         ],
-    });
+    );
     voxel_data.bind_group = bind_group;
 }
