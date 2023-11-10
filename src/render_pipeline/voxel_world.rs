@@ -25,6 +25,38 @@ pub struct GpuVoxelWorld {
     pub brickmap_holes: VecDeque<usize>,
     pub brick_holes: VecDeque<usize>,
     pub color_texture_size: UVec3,
+    pub brickmap_depth: u32,
+}
+
+impl GpuVoxelWorld {
+    /// recurse the brickmap and call f on each brick
+    pub fn recursive_search(&self, f: &mut dyn FnMut(usize, UVec3, u32)) {
+        for i in 0..8 {
+            let pos = UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * (1 << self.brickmap_depth - 1);
+            self.recursive_search_inner(i as usize, pos, 1, f);
+        }
+    }
+
+    fn recursive_search_inner(
+        &self,
+        node_index: usize,
+        pos: UVec3,
+        depth: u32,
+        f: &mut dyn FnMut(usize, UVec3, u32),
+    ) {
+        let children_index = self.brickmap[node_index];
+        if children_index >= BRICK_OFFSET {
+            f(node_index, pos, depth);
+            return;
+        }
+
+        for i in 0..8 {
+            let half_size = 1 << self.brickmap_depth - depth - 1;
+            let pos = pos + UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * half_size;
+            let index = 8 * children_index + i;
+            self.recursive_search_inner(index as usize, pos, depth + 1, f);
+        }
+    }
 }
 
 pub struct VoxelWorldPlugin;
@@ -37,7 +69,7 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 9;
+        let world_depth = 11;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
@@ -48,6 +80,7 @@ impl Plugin for VoxelWorldPlugin {
 
         // setup gpu brickmap
         let mut brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
+        let brickmap_depth = world_depth - BRICK_SIZE.trailing_zeros();
         let mut gpu_to_cpu = vec![0; 8 * brickmap_max_nodes];
         for i in 0..8 {
             brickmap[i] = BRICK_OFFSET + 1;
@@ -61,11 +94,12 @@ impl Plugin for VoxelWorldPlugin {
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
             brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
             color_texture_size,
+            brickmap_depth,
         };
 
         // uniforms
         let voxel_uniforms = VoxelUniforms {
-            brickmap_depth: world_depth - BRICK_SIZE.trailing_zeros(),
+            brickmap_depth,
             brick_size: BRICK_SIZE.trailing_zeros(),
             brick_ints: Brick::brick_ints() as u32,
         };

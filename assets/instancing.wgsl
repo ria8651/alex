@@ -22,28 +22,26 @@ struct Vertex {
 struct VertexOutput {
     @builtin(position) clip_pos: vec4<f32>,
     @location(0) local_pos: vec3<f32>,
-    @location(1) local_cam: vec3<f32>,
+    @location(1) pos_scale: vec4<f32>,
     @location(2) normal: vec3<f32>,
     @location(3) brick: u32,
 };
 
 @vertex
 fn vertex(vertex: Vertex) -> VertexOutput {
-    let position = vertex.position * vertex.pos_scale.w + vertex.pos_scale.xyz;
-    let clip_pos = mesh_position_local_to_clip(
-        get_model_matrix(0u),
-        vec4<f32>(position, 1.0)
-    );
-    let camera_local = (view.world_position - vertex.pos_scale.xyz) / vertex.pos_scale.w;
+    // the 0.9999 avoids z-fighting with the backface
+    let position = 0.9999 * vertex.position * vertex.pos_scale.w + vertex.pos_scale.xyz;
 
-    var out: VertexOutput;
     // NOTE: Passing 0 as the instance_index to get_model_matrix() is a hack
     // for this example as the instance_index builtin would map to the wrong
     // index in the Mesh array. This index could be passed in via another
     // uniform instead but it's unnecessary for the example.
+    let clip_pos = mesh_position_local_to_clip(get_model_matrix(0u), vec4<f32>(position, 1.0));
+
+    var out: VertexOutput;
     out.clip_pos = clip_pos;
     out.local_pos = vertex.position;
-    out.local_cam = camera_local;
+    out.pos_scale = vertex.pos_scale;
     out.normal = vertex.normal;
     out.brick = vertex.brick;
 
@@ -67,23 +65,26 @@ var<storage, read> bricks: array<u32>;
 @group(2) @binding(4)
 var color_texture: texture_storage_3d<rgba8unorm, read>;
 
-struct FragmentOutput {
-    @location(0) color: vec4<f32>,
-    @builtin(frag_depth) depth: f32,
-}
-
-fn trace_brick(index: u32, local_pos: vec3<f32>, dir: vec3<f32>, normal: ptr<function, vec3<f32>>) -> vec3<f32> {
+// local_pos ranges from (0,0,0) to (1,1,1) inside the brick
+fn trace_brick(index: u32, local_pos: ptr<function, vec3<f32>>, dir: vec3<f32>, normal: ptr<function, vec3<f32>>) -> vec3<f32> {
     let r_sign = sign(dir);
-    var pos_in_brick = local_pos * 0.5 + 0.5 - *normal * 0.000001;
-    var initial_pos_in_brick = pos_in_brick;
+    var initial_pos = *local_pos;
     var steps = 0u;
-    while steps < 500u {
+    while steps < 50u {
         var size = 0;
 
-        let pos_in_0 = vec3<i32>(pos_in_brick * 16.0);
-        let pos_in_1 = vec3<i32>(pos_in_brick * 8.0);
-        let pos_in_2 = vec3<i32>(pos_in_brick * 4.0);
-        let pos_in_3 = vec3<i32>(pos_in_brick * 2.0);
+        let lookup_pos = *local_pos - *normal * 0.000001;
+        if any(lookup_pos < vec3(0.0)) || any(lookup_pos > vec3(1.0)) {
+            if steps == 0u {
+                return lookup_pos;
+            }
+            break;
+        }
+
+        let pos_in_0 = vec3<i32>(lookup_pos * 16.0);
+        let pos_in_1 = vec3<i32>(lookup_pos * 8.0);
+        let pos_in_2 = vec3<i32>(lookup_pos * 4.0);
+        let pos_in_3 = vec3<i32>(lookup_pos * 2.0);
 
         let index_0 = 0u + u32(pos_in_0.z * 16 * 16 + pos_in_0.y * 16 + pos_in_0.x);
         let index_1 = 4096u + u32(pos_in_1.z * 8 * 8 + pos_in_1.y * 8 + pos_in_1.x);
@@ -117,51 +118,56 @@ fn trace_brick(index: u32, local_pos: vec3<f32>, dir: vec3<f32>, normal: ptr<fun
                 (i32(index) / dim.z) % dim.y,
                 i32(index) % dim.z,
             ) * brick_size;
-            let color = textureLoad(color_texture, brick_pos_in_texture + vec3<i32>(pos_in_brick * f32(brick_size))).rgb;
-            return pos_in_brick;
+            let color = textureLoad(color_texture, brick_pos_in_texture + vec3<i32>(lookup_pos * f32(brick_size))).rgb;
+            return color;
+            // return vec3(f32(steps) / 2.0);
         }
 
-        let rounded_pos = floor(pos_in_brick * f32(size)) / f32(size);
-        let t_max = (rounded_pos - initial_pos_in_brick + 0.5 * (r_sign + 1.0) / f32(size)) / dir;
+        let rounded_pos = floor(lookup_pos * f32(size)) / f32(size);
+        let t_max = (rounded_pos - initial_pos + 0.5 * (r_sign + 1.0) / f32(size)) / dir;
 
         // https://www.shadertoy.com/view/4dX3zl (good old shader toy)
         let mask = vec3<f32>(t_max.xyz <= min(t_max.yzx, t_max.zxy));
         *normal = mask * -r_sign;
 
         let t_current = min(min(t_max.x, t_max.y), t_max.z);
-        pos_in_brick = initial_pos_in_brick + dir * t_current - *normal * 0.000002;
+        *local_pos = initial_pos + dir * t_current;
 
         steps += 1u;
-
-        if any(pos_in_brick < vec3(0.0)) || any(pos_in_brick > vec3(1.0)) {
-            break;
-        }
     }
 
-    // discard;
-    return vec3(f32(steps) / 2.0);
+    discard;
+    // return vec3(f32(steps) / 10.0);
+}
+
+struct FragmentOutput {
+    @location(0) color: vec4<f32>,
 }
 
 @fragment
-fn fragment(in: VertexOutput) -> FragmentOutput {
+fn fragment(in: VertexOutput, @builtin(front_facing) facing: bool) -> FragmentOutput {
     var output_color = vec3(0.0);
 
     let viewport_uv = coords_to_viewport_uv(in.clip_pos.xy, view.viewport);
     let clip_uv = (viewport_uv * 2.0 - 1.0) * vec2(1.0, -1.0);
+    let dir = normalize(direction_clip_to_world(vec4(clip_uv, 0.0, 1.0)));
 
     var pos: vec3<f32>;
-    if all(in.local_cam < vec3(1.0)) && all(in.local_cam > vec3(-1.0)) {
-        pos = in.local_cam;
+    let local_cam = (view.world_position - in.pos_scale.xyz) / in.pos_scale.w;
+    if all(local_cam < vec3(1.0)) && all(local_cam > vec3(0.0)) {
+        pos = local_cam;
     } else {
         pos = in.local_pos;
     }
-    let dir = normalize(direction_clip_to_world(vec4(clip_uv, 0.0, 1.0)));
 
     var normal = in.normal;
-    output_color = trace_brick(in.brick, pos, dir, &normal);
+    output_color = trace_brick(in.brick, &pos, dir, &normal);
+
+    if any(in.local_pos < vec3(0.0)) || any(in.local_pos > vec3(1.0)) {
+        output_color = vec3(1.0, 0.0, 0.0);
+    }
 
     var out: FragmentOutput;
     out.color = vec4<f32>(output_color, 1.0);
-    out.depth = in.clip_pos.z;
     return out;
 }

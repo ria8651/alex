@@ -71,78 +71,103 @@ fn voxel_streaming_system(
     let streaming_pos =
         extracted_view.transform.translation() + (1 << cpu_voxel_world.brickmap_depth - 1) as f32;
 
-    // find the nodes that need updating
-    fn recursive_search(
-        brickmap: &mut [u32],
-        cpu_voxel_world: &CpuVoxelWorld,
-        node_index: usize,
-        pos: UVec3,
-        depth: u32,
-        brickmap_depth: u32,
-        streaming_pos: Vec3,
-        nodes_to_divide: &mut Vec<(usize, UVec3, u32)>,
-        nodes_to_cull: &mut Vec<(usize, UVec3, u32)>,
-        streaming_ratio: f32,
-    ) {
-        let node_size = (1 << brickmap_depth - depth) as f32;
-        let distance =
-            (pos.as_vec3() + node_size / 2.0 - streaming_pos).length() * BRICK_SIZE as f32;
-        let ratio = 100.0 * node_size / distance;
+    // // find the nodes that need updating
+    // fn recursive_search(
+    //     brickmap: &mut [u32],
+    //     cpu_voxel_world: &CpuVoxelWorld,
+    //     node_index: usize,
+    //     pos: UVec3,
+    //     depth: u32,
+    //     brickmap_depth: u32,
+    //     streaming_pos: Vec3,
+    //     nodes_to_divide: &mut Vec<(usize, UVec3, u32)>,
+    //     nodes_to_cull: &mut Vec<(usize, UVec3, u32)>,
+    //     streaming_ratio: f32,
+    // ) {
+    //     let node_size = (1 << brickmap_depth - depth) as f32;
+    //     let distance =
+    //         (pos.as_vec3() + node_size / 2.0 - streaming_pos).length() * BRICK_SIZE as f32;
+    //     let ratio = 100.0 * node_size / distance;
 
-        let children_index = brickmap[node_index];
-        if children_index >= BRICK_OFFSET {
-            if ratio > streaming_ratio {
-                let (cpu_node_index, _, _) = cpu_voxel_world.get_node(pos, Some(depth));
-                let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
-                if cpu_node.children != 0 {
-                    nodes_to_divide.push((node_index, pos, depth));
-                }
-            }
-            return;
-        }
-        if ratio < streaming_ratio {
-            nodes_to_cull.push((node_index, pos, depth));
-            // return;
-        }
+    //     let children_index = brickmap[node_index];
+    //     if children_index >= BRICK_OFFSET {
+    //         if ratio > streaming_ratio {
+    //             let (cpu_node_index, _, _) = cpu_voxel_world.get_node(pos, Some(depth));
+    //             let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
+    //             if cpu_node.children != 0 {
+    //                 nodes_to_divide.push((node_index, pos, depth));
+    //             }
+    //         }
+    //         return;
+    //     }
+    //     if ratio < streaming_ratio {
+    //         nodes_to_cull.push((node_index, pos, depth));
+    //         // return;
+    //     }
 
-        for i in 0..8 {
-            let half_size = 1 << brickmap_depth - depth - 1;
-            let pos = pos + UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * half_size;
-            let index = 8 * children_index + i;
-            recursive_search(
-                brickmap,
-                cpu_voxel_world,
-                index as usize,
-                pos,
-                depth + 1,
-                brickmap_depth,
-                streaming_pos,
-                nodes_to_divide,
-                nodes_to_cull,
-                streaming_ratio,
-            );
-        }
-    }
+    //     for i in 0..8 {
+    //         let half_size = 1 << brickmap_depth - depth - 1;
+    //         let pos = pos + UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * half_size;
+    //         let index = 8 * children_index + i;
+    //         recursive_search(
+    //             brickmap,
+    //             cpu_voxel_world,
+    //             index as usize,
+    //             pos,
+    //             depth + 1,
+    //             brickmap_depth,
+    //             streaming_pos,
+    //             nodes_to_divide,
+    //             nodes_to_cull,
+    //             streaming_ratio,
+    //         );
+    //     }
+    // }
+
+    // // collect the nodes that need to be updated
+    // let mut nodes_to_divide = Vec::new();
+    // let mut nodes_to_cull = Vec::new();
+    // for i in 0..8 {
+    //     let pos =
+    //         UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * (1 << cpu_voxel_world.brickmap_depth - 1);
+    //     recursive_search(
+    //         &mut gpu_voxel_world.brickmap,
+    //         &cpu_voxel_world,
+    //         i as usize,
+    //         pos,
+    //         1,
+    //         cpu_voxel_world.brickmap_depth,
+    //         streaming_pos,
+    //         &mut nodes_to_divide,
+    //         &mut nodes_to_cull,
+    //         streaming_settings.streaming_ratio,
+    //     );
+    // }
 
     // collect the nodes that need to be updated
     let mut nodes_to_divide = Vec::new();
     let mut nodes_to_cull = Vec::new();
-    for i in 0..8 {
-        let pos =
-            UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * (1 << cpu_voxel_world.brickmap_depth - 1);
-        recursive_search(
-            &mut gpu_voxel_world.brickmap,
-            &cpu_voxel_world,
-            i as usize,
-            pos,
-            1,
-            cpu_voxel_world.brickmap_depth,
-            streaming_pos,
-            &mut nodes_to_divide,
-            &mut nodes_to_cull,
-            streaming_settings.streaming_ratio,
-        );
-    }
+    gpu_voxel_world.recursive_search(&mut |index, pos, depth| {
+        let node_size = (1 << cpu_voxel_world.brickmap_depth - depth) as f32;
+        let distance =
+            (pos.as_vec3() + node_size / 2.0 - streaming_pos).length() * BRICK_SIZE as f32;
+        let ratio = 100.0 * node_size / distance;
+
+        let children_index = gpu_voxel_world.brickmap[index];
+        if children_index >= BRICK_OFFSET {
+            if ratio > streaming_settings.streaming_ratio {
+                let cpu_node_index = gpu_voxel_world.gpu_to_cpu[index] as usize;
+                let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
+                if cpu_node.children != 0 {
+                    nodes_to_divide.push((index, pos, depth));
+                }
+            }
+            return;
+        }
+        if ratio < streaming_settings.streaming_ratio {
+            nodes_to_cull.push((index, pos, depth));
+        }
+    });
 
     // // this looks slow but it's actually pretty fast
     // for (index, node_counter) in result.iter().enumerate() {

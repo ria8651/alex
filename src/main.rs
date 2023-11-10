@@ -6,7 +6,7 @@ use bevy::{
 };
 use bevy_atmosphere::prelude::*;
 use character::CharacterEntity;
-use render_pipeline::VoxelStreamingCamera;
+use render_pipeline::{VoxelStreamingCamera, VoxelVolume, VoxelVolumeBundle};
 
 mod character;
 mod render_pipeline;
@@ -23,7 +23,7 @@ fn main() {
                 ..default()
             }),
             AtmospherePlugin,
-            render_pipeline::RenderPlugin,
+            render_pipeline::VoxelPlugin,
             character::CharacterPlugin,
             ui::UiPlugin,
         ))
@@ -56,7 +56,15 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT;
     let render_texture = images.add(render_texture);
 
-    // add voxel camera with character controller
+    // add voxel volume
+    commands.spawn(VoxelVolumeBundle {
+        voxel_volume: VoxelVolume {
+            path: "assets/worlds/imperial_city".into(),
+        },
+        ..default()
+    });
+
+    // add camera with character controller
     let character_transform =
         Transform::from_xyz(21.035963, 19.771912, -31.12883).looking_at(Vec3::ZERO, Vec3::Y);
     commands.spawn((
@@ -74,6 +82,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 far: 100.0,
                 ..default()
             }),
+            // tonemapping: Tonemapping::None,
             ..default()
         },
         VoxelStreamingCamera,
