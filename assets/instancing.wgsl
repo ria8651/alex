@@ -139,7 +139,7 @@ fn trace_brick(index: u32, local_pos: vec3<f32>, dir: vec3<f32>, normal: ptr<fun
     }
 
     // discard;
-    return vec3(f32(steps) / 10.0);
+    return vec3(f32(steps) / 2.0);
 }
 
 @fragment

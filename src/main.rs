@@ -6,6 +6,7 @@ use bevy::{
 };
 use bevy_atmosphere::prelude::*;
 use character::CharacterEntity;
+use render_pipeline::VoxelStreamingCamera;
 
 mod character;
 mod render_pipeline;
@@ -39,12 +40,7 @@ struct CameraData {
     sprite: Entity,
 }
 
-fn setup(
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     // we use a render texture to downscale the main pass
     let mut render_texture = Image::new_fill(
         Extent3d {
@@ -78,14 +74,16 @@ fn setup(
                 far: 100.0,
                 ..default()
             }),
-            tonemapping: Tonemapping::None,
             ..default()
         },
-        // AtmosphereCamera::default(),
+        VoxelStreamingCamera,
         CharacterEntity {
             look_at: -character_transform.local_z(),
             ..default()
         },
+        BloomSettings::default(),
+        Fxaa::default(),
+        // AtmosphereCamera::default(),
     ));
 
     // add sprite and camera to render the render texture
@@ -95,18 +93,14 @@ fn setup(
             ..default()
         })
         .id();
-    commands.spawn((
-        Camera2dBundle {
-            camera: Camera {
-                hdr: true,
-                ..default()
-            },
-            tonemapping: Tonemapping::None,
+    commands.spawn((Camera2dBundle {
+        camera: Camera {
+            hdr: true,
             ..default()
         },
-        // BloomSettings::default(),
-        // Fxaa::default(),
-    ));
+        tonemapping: Tonemapping::None,
+        ..default()
+    },));
     commands.insert_resource(CameraData {
         render_texture,
         sprite,

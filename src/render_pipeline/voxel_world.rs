@@ -89,11 +89,7 @@ impl Plugin for VoxelWorldPlugin {
         });
 
         // bricks
-        // let bricks = vec![0; 4 * Brick::brick_ints() * brick_count];
-        let mut bricks = Vec::new();
-        for i in 0..1000 {
-            bricks.append(&mut cpu_brickmap.bricks[i].get_bitmask());
-        }
+        let bricks = vec![0; 4 * Brick::brick_ints() * brick_count];
         let bricks = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: &bricks,
             label: None,

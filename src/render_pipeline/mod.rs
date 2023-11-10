@@ -1,4 +1,7 @@
-use self::voxel_world::{SetVoxelDataBindGroup, VoxelData, VoxelWorldPlugin};
+use self::{
+    voxel_streaming::VoxelStreamingPlugin,
+    voxel_world::{SetVoxelDataBindGroup, VoxelData, VoxelWorldPlugin},
+};
 use bevy::{
     core_pipeline::core_3d::Opaque3d,
     ecs::{
@@ -26,19 +29,19 @@ use bevy::{
 };
 use bytemuck::{Pod, Zeroable};
 
-// pub use {main_pass::MainPassSettings, voxel_streaming::StreamingSettings};
-
 mod cpu_brickmap;
 mod load_anvil;
 // mod main_pass;
-// mod voxel_streaming;
+mod voxel_streaming;
 mod voxel_world;
+
+pub use voxel_streaming::{StreamingSettings, VoxelStreamingCamera};
 
 pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((VoxelWorldPlugin, VoxelMaterialPlugin))
+        app.add_plugins((VoxelWorldPlugin, VoxelMaterialPlugin, VoxelStreamingPlugin))
             .add_systems(Startup, setup);
     }
 }
@@ -61,7 +64,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
                 })
                 .collect(),
         ),
-        // NoFrustumCulling,
+        NoFrustumCulling,
     ));
 }
 
