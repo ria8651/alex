@@ -14,6 +14,7 @@ use bevy::{
 use std::path::PathBuf;
 
 mod cpu_brickmap;
+mod gpu_brickmap;
 mod load_anvil;
 mod voxel_render;
 mod voxel_streaming;

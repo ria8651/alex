@@ -24,3 +24,4 @@ serde_json = "1.0"
 bevy-inspector-egui = "0.21"
 wgpu = { version = "0.17", default-features = false }
 bytemuck = "1.7"
+anyhow = "1.0"

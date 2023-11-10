@@ -1,5 +1,7 @@
 use super::{
-    voxel_world::{GpuVoxelWorld, SetVoxelDataBindGroup, VoxelData},
+    cpu_brickmap::BRICK_OFFSET,
+    gpu_brickmap::GpuVoxelWorld,
+    voxel_world::{SetVoxelDataBindGroup, VoxelData},
     VoxelVolume,
 };
 use bevy::{
@@ -93,10 +95,13 @@ fn prepare_instance_buffers(
     gpu_voxel_world.recursive_search(&mut |index, pos, depth| {
         let position = pos.as_vec3();
         let scale = (1 << gpu_voxel_world.brickmap_depth - depth) as f32;
+        let brick = gpu_voxel_world.brickmap[index]
+            .checked_sub(BRICK_OFFSET)
+            .expect("non leaf node in recursive search");
         brick_istance_data.push(BrickInstance {
             position,
             scale,
-            brick: index as u32,
+            brick,
         });
     });
 

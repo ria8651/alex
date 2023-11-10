@@ -163,9 +163,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) facing: bool) -> FragmentOu
     var normal = in.normal;
     output_color = trace_brick(in.brick, &pos, dir, &normal);
 
-    if any(in.local_pos < vec3(0.0)) || any(in.local_pos > vec3(1.0)) {
-        output_color = vec3(1.0, 0.0, 0.0);
-    }
+    // output_color = vec3(f32(in.brick) / 16.0);
 
     var out: FragmentOutput;
     out.color = vec4<f32>(output_color, 1.0);
