@@ -1,7 +1,4 @@
-use crate::{
-    character::CharacterEntity,
-    render_pipeline::{MainPassSettings, StreamingSettings},
-};
+use crate::character::CharacterEntity;
 use bevy::{
     core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
@@ -32,7 +29,7 @@ struct FpsData(VecDeque<f64>);
 
 fn ui_system(
     mut contexts: EguiContexts,
-    mut camera_settings_query: Query<(&mut MainPassSettings, Option<&mut Projection>)>,
+    // mut camera_settings_query: Query<(&mut MainPassSettings, Option<&mut Projection>)>,
     mut post_camera_settings_query: Query<
         (
             Option<&mut BloomSettings>,
@@ -45,7 +42,7 @@ fn ui_system(
     diagnostics: Res<DiagnosticsStore>,
     mut character: Query<(&mut Transform, &mut CharacterEntity)>,
     mut fps_data: ResMut<FpsData>,
-    streaming_settings: ResMut<StreamingSettings>,
+    // streaming_settings: ResMut<StreamingSettings>,
     type_registry: ResMut<AppTypeRegistry>,
 ) {
     let (mut character, mut character_entity) = character.single_mut();
@@ -79,41 +76,41 @@ fn ui_system(
             }
         }
 
-        let (mut trace_settings, projection) = camera_settings_query.single_mut();
-        let (bloom_settings, tonemapping, fxaa) = post_camera_settings_query.single_mut();
-        egui::CollapsingHeader::new(format!("Camera Settings"))
-            .default_open(true)
-            .show(ui, |ui| {
-                ui_for_value(trace_settings.as_mut(), ui, &type_registry.read());
-                if let Some(tonemapping) = tonemapping {
-                    ui.push_id(1, |ui| {
-                        ui_for_value(tonemapping.into_inner(), ui, &type_registry.read());
-                    });
-                }
-                if let Some(bloom_settings) = bloom_settings {
-                    ui.push_id(2, |ui| {
-                        ui_for_value(bloom_settings.into_inner(), ui, &type_registry.read());
-                    });
-                }
-                if let Some(fxaa) = fxaa {
-                    ui.push_id(3, |ui| {
-                        ui_for_value(fxaa.into_inner(), ui, &type_registry.read());
-                    });
-                }
-                if let Some(projection) = projection {
-                    ui.push_id(4, |ui| {
-                        ui_for_value(projection.into_inner(), ui, &type_registry.read());
-                    });
-                }
-            });
+        // let (mut trace_settings, projection) = camera_settings_query.single_mut();
+        // let (bloom_settings, tonemapping, fxaa) = post_camera_settings_query.single_mut();
+        // egui::CollapsingHeader::new(format!("Camera Settings"))
+        //     .default_open(true)
+        //     .show(ui, |ui| {
+        //         ui_for_value(trace_settings.as_mut(), ui, &type_registry.read());
+        //         if let Some(tonemapping) = tonemapping {
+        //             ui.push_id(1, |ui| {
+        //                 ui_for_value(tonemapping.into_inner(), ui, &type_registry.read());
+        //             });
+        //         }
+        //         if let Some(bloom_settings) = bloom_settings {
+        //             ui.push_id(2, |ui| {
+        //                 ui_for_value(bloom_settings.into_inner(), ui, &type_registry.read());
+        //             });
+        //         }
+        //         if let Some(fxaa) = fxaa {
+        //             ui.push_id(3, |ui| {
+        //                 ui_for_value(fxaa.into_inner(), ui, &type_registry.read());
+        //             });
+        //         }
+        //         if let Some(projection) = projection {
+        //             ui.push_id(4, |ui| {
+        //                 ui_for_value(projection.into_inner(), ui, &type_registry.read());
+        //             });
+        //         }
+        //     });
 
-        ui.push_id(5, |ui| {
-            ui_for_value(
-                streaming_settings.into_inner(),
-                ui,
-                &type_registry.read(),
-            );
-        });
+        // ui.push_id(5, |ui| {
+        //     ui_for_value(
+        //         streaming_settings.into_inner(),
+        //         ui,
+        //         &type_registry.read(),
+        //     );
+        // });
 
         if ui.button("print pos rot").clicked() {
             println!("{:?}, {:?}", character.translation, character.rotation);

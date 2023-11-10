@@ -1,11 +1,11 @@
 use bevy::{
-    core_pipeline::{bloom::BloomSettings, tonemapping::Tonemapping},
+    core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     prelude::*,
-    render::{camera::{RenderTarget, CameraRenderGraph}, render_resource::*},
+    render::{camera::RenderTarget, render_resource::*},
     window::{PrimaryWindow, WindowResized, WindowScaleFactorChanged},
 };
+use bevy_atmosphere::prelude::*;
 use character::CharacterEntity;
-use render_pipeline::MainPassSettings;
 
 mod character;
 mod render_pipeline;
@@ -21,10 +21,12 @@ fn main() {
                 }),
                 ..default()
             }),
+            AtmospherePlugin,
             render_pipeline::RenderPlugin,
             character::CharacterPlugin,
             ui::UiPlugin,
         ))
+        .insert_resource(Msaa::Off)
         .add_systems(Startup, setup)
         .add_systems(Update, update_render_texture)
         .run();
@@ -37,7 +39,12 @@ struct CameraData {
     sprite: Entity,
 }
 
-fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn setup(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     // we use a render texture to downscale the main pass
     let mut render_texture = Image::new_fill(
         Extent3d {
@@ -59,7 +66,6 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn((
         Camera3dBundle {
             transform: character_transform,
-            camera_render_graph: CameraRenderGraph::new("voxel"),
             camera: Camera {
                 hdr: true,
                 target: RenderTarget::Image(render_texture.clone()),
@@ -72,9 +78,10 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 far: 100.0,
                 ..default()
             }),
+            tonemapping: Tonemapping::None,
             ..default()
         },
-        MainPassSettings::default(),
+        // AtmosphereCamera::default(),
         CharacterEntity {
             look_at: -character_transform.local_z(),
             ..default()
@@ -94,10 +101,10 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 hdr: true,
                 ..default()
             },
-            tonemapping: Tonemapping::ReinhardLuminance,
+            tonemapping: Tonemapping::None,
             ..default()
         },
-        BloomSettings::default(),
+        // BloomSettings::default(),
         // Fxaa::default(),
     ));
     commands.insert_resource(CameraData {

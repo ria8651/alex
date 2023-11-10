@@ -1,12 +1,13 @@
 use super::{
-    cpu_brickmap::{Brick, CpuBrickmap, BRICK_SIZE, COUNTER_BITS},
+    cpu_brickmap::{Brick, CpuBrickmap, BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS},
     load_anvil::load_anvil,
-    voxel_streaming::BRICK_OFFSET,
 };
 use bevy::{
+    ecs::system::{lifetimeless::SRes, SystemParamItem},
     prelude::*,
     render::{
         extract_resource::ExtractResource,
+        render_phase::{PhaseItem, RenderCommand, RenderCommandResult, TrackedRenderPass},
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
         Render, RenderApp, RenderSet,
@@ -36,7 +37,7 @@ impl Plugin for VoxelWorldPlugin {
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 10;
+        let world_depth = 9;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
@@ -88,7 +89,11 @@ impl Plugin for VoxelWorldPlugin {
         });
 
         // bricks
-        let bricks = vec![0; 4 * Brick::brick_ints() * brick_count];
+        // let bricks = vec![0; 4 * Brick::brick_ints() * brick_count];
+        let mut bricks = Vec::new();
+        for i in 0..1000 {
+            bricks.append(&mut cpu_brickmap.bricks[i].get_bitmask());
+        }
         let bricks = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: &bricks,
             label: None,
@@ -174,35 +179,6 @@ impl Plugin for VoxelWorldPlugin {
                 ],
             });
 
-        let bind_group = render_device.create_bind_group(
-            Some("voxel bind group"),
-            &bind_group_layout,
-            &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.binding().unwrap(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: brickmap.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: counters.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: bricks.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 4,
-                    resource: BindingResource::TextureView(
-                        &color.create_view(&TextureViewDescriptor::default()),
-                    ),
-                },
-            ],
-        );
-
         app.sub_app_mut(RenderApp)
             .insert_resource(voxel_uniforms)
             .insert_resource(VoxelData {
@@ -212,12 +188,17 @@ impl Plugin for VoxelWorldPlugin {
                 bricks,
                 color,
                 bind_group_layout,
-                bind_group,
+                bind_group: None,
             })
             .insert_resource(CpuVoxelWorld(cpu_brickmap))
             .insert_resource(gpu_voxel_world)
-            .add_systems(Render, prepare_uniforms.in_set(RenderSet::Prepare))
-            .add_systems(Render, queue_bind_group.in_set(RenderSet::Queue));
+            .add_systems(
+                Render,
+                (
+                    prepare_uniforms.in_set(RenderSet::Prepare),
+                    prepare_bind_group.in_set(RenderSet::PrepareBindGroups),
+                ),
+            );
     }
 }
 
@@ -229,7 +210,7 @@ pub struct VoxelData {
     pub bricks: Buffer,
     pub color: Texture,
     pub bind_group_layout: BindGroupLayout,
-    pub bind_group: BindGroup,
+    pub bind_group: Option<BindGroup>,
 }
 
 #[derive(Resource, ExtractResource, Clone, ShaderType)]
@@ -251,7 +232,7 @@ fn prepare_uniforms(
         .write_buffer(&render_device, &render_queue);
 }
 
-fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<VoxelData>) {
+fn prepare_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<VoxelData>) {
     let bind_group = render_device.create_bind_group(
         Some("voxel bind group"),
         &voxel_data.bind_group_layout,
@@ -282,5 +263,34 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             },
         ],
     );
-    voxel_data.bind_group = bind_group;
+    voxel_data.bind_group = Some(bind_group);
+}
+
+pub struct SetVoxelDataBindGroup<const I: usize>;
+
+impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetVoxelDataBindGroup<I> {
+    type Param = SRes<VoxelData>;
+    type ViewWorldQuery = ();
+    type ItemWorldQuery = ();
+
+    fn render<'w>(
+        _item: &P,
+        _view: (),
+        _entity: (),
+        query: SystemParamItem<'w, '_, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) -> RenderCommandResult {
+        let voxel_world_data = query.into_inner();
+        let bind_group = voxel_world_data.bind_group.as_ref();
+        match bind_group {
+            Some(bind_group) => {
+                pass.set_bind_group(I, bind_group, &[]);
+                RenderCommandResult::Success
+            }
+            None => {
+                error!("voxel bind group not created");
+                RenderCommandResult::Failure
+            }
+        }
+    }
 }
