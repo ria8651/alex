@@ -4,8 +4,9 @@ use std::collections::VecDeque;
 use wgpu::ImageCopyTexture;
 
 use super::{
-    cpu_brickmap::{Brick, BRICK_OFFSET, BRICK_SIZE},
+    cpu_brickmap::Brick,
     voxel_world::{CpuVoxelWorld, VoxelData},
+    BRICK_OFFSET, BRICK_SIZE,
 };
 
 #[derive(Resource)]
@@ -20,7 +21,7 @@ pub struct GpuVoxelWorld {
 
 #[allow(dead_code)]
 impl GpuVoxelWorld {
-    /// recurse the brickmap and call f on each brick
+    /// recurse the brickmap and call f on each *node* (not just leaf nodes)
     pub fn recursive_search(&self, f: &mut dyn FnMut(usize, UVec3, u32)) {
         for i in 0..8 {
             let pos = UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * (1 << self.brickmap_depth - 1);
@@ -35,17 +36,16 @@ impl GpuVoxelWorld {
         depth: u32,
         f: &mut dyn FnMut(usize, UVec3, u32),
     ) {
-        let children_index = self.brickmap[node_index];
-        if children_index >= BRICK_OFFSET {
-            f(node_index, pos, depth);
-            return;
-        }
+        f(node_index, pos, depth);
 
-        for i in 0..8 {
-            let half_size = 1 << self.brickmap_depth - depth - 1;
-            let pos = pos + UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * half_size;
-            let index = 8 * children_index + i;
-            self.recursive_search_inner(index as usize, pos, depth + 1, f);
+        let children_index = self.brickmap[node_index];
+        if children_index < BRICK_OFFSET {
+            for i in 0..8 {
+                let half_size = 1 << self.brickmap_depth - depth - 1;
+                let pos = pos + UVec3::new(i >> 2 & 1, i >> 1 & 1, i & 1) * half_size;
+                let index = 8 * children_index + i;
+                self.recursive_search_inner(index as usize, pos, depth + 1, f);
+            }
         }
     }
 

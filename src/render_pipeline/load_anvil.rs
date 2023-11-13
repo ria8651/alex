@@ -1,4 +1,7 @@
-use super::cpu_brickmap::{Brick, CpuBrickmap, BRICK_SIZE};
+use super::{
+    cpu_brickmap::{Brick, CpuBrickmap},
+    BRICK_SIZE,
+};
 use bevy::{prelude::*, utils::HashMap};
 use std::path::PathBuf;
 

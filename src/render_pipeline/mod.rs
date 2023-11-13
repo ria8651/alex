@@ -1,4 +1,7 @@
-pub use self::voxel_streaming::{StreamingSettings, VoxelStreamingCamera};
+pub use self::{
+    voxel_streaming::{StreamingSettings, VoxelStreamingCamera},
+    voxel_world::VoxelWorldStatsResource,
+};
 
 use self::{
     voxel_render::VoxelRenderPlugin, voxel_streaming::VoxelStreamingPlugin,
@@ -19,6 +22,10 @@ mod load_anvil;
 mod voxel_render;
 mod voxel_streaming;
 mod voxel_world;
+
+pub const BRICK_SIZE: u32 = 16;
+pub const BRICK_OFFSET: u32 = 1 << 31;
+pub const COUNTER_BITS: usize = 32;
 
 #[derive(Component, ExtractComponent, Clone, Default)]
 pub struct VoxelVolume {

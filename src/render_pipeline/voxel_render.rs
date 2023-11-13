@@ -1,8 +1,7 @@
 use super::{
-    cpu_brickmap::BRICK_OFFSET,
     gpu_brickmap::GpuVoxelWorld,
     voxel_world::{SetVoxelDataBindGroup, VoxelData},
-    VoxelVolume,
+    VoxelVolume, BRICK_OFFSET,
 };
 use bevy::{
     core_pipeline::core_3d::Opaque3d,
@@ -93,7 +92,12 @@ fn prepare_instance_buffers(
     let mut brick_istance_data = Vec::new();
 
     gpu_voxel_world.recursive_search(&mut |index, pos, depth| {
-        let position = pos.as_vec3();
+        // skip non leaf nodes
+        if gpu_voxel_world.brickmap[index] < BRICK_OFFSET {
+            return;
+        }
+
+        let position = pos.as_vec3() - (1 << gpu_voxel_world.brickmap_depth - 1) as f32;
         let scale = (1 << gpu_voxel_world.brickmap_depth - depth) as f32;
         let brick = gpu_voxel_world.brickmap[index]
             .checked_sub(BRICK_OFFSET)

@@ -1,7 +1,8 @@
 use super::{
-    cpu_brickmap::{Brick, CpuBrickmap, BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS},
+    cpu_brickmap::{Brick, CpuBrickmap},
     gpu_brickmap::GpuVoxelWorld,
     load_anvil::load_anvil,
+    BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS,
 };
 use bevy::{
     ecs::system::{lifetimeless::SRes, SystemParamItem},
@@ -14,7 +15,11 @@ use bevy::{
         Render, RenderApp, RenderSet,
     },
 };
-use std::{collections::VecDeque, path::PathBuf};
+use std::{
+    collections::VecDeque,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Resource, Deref, DerefMut)]
 pub struct CpuVoxelWorld(CpuBrickmap);
@@ -22,14 +27,18 @@ pub struct CpuVoxelWorld(CpuBrickmap);
 pub struct VoxelWorldPlugin;
 
 impl Plugin for VoxelWorldPlugin {
-    fn build(&self, _app: &mut App) {}
+    fn build(&self, app: &mut App) {
+        let stats = VoxelWorldStatsResource::default();
+        app.insert_resource(stats.clone());
+        app.sub_app_mut(RenderApp).insert_resource(stats.clone());
+    }
 
     fn finish(&self, app: &mut App) {
         let render_device = app.world.resource::<RenderDevice>();
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 9;
+        let world_depth = 12;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
@@ -283,4 +292,21 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetVoxelDataBindGroup<I>
             }
         }
     }
+}
+
+#[derive(Resource, Clone, Deref, DerefMut)]
+pub struct VoxelWorldStatsResource(Arc<Mutex<VoxelWorldStats>>);
+
+impl Default for VoxelWorldStatsResource {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(VoxelWorldStats {
+            nodes: 0,
+            bricks: 0,
+        })))
+    }
+}
+
+pub struct VoxelWorldStats {
+    pub nodes: usize,
+    pub bricks: usize,
 }

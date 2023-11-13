@@ -1,8 +1,8 @@
 use super::{
     gpu_brickmap::GpuVoxelWorld,
     voxel_world::{CpuVoxelWorld, VoxelData},
+    VoxelWorldStatsResource, BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS,
 };
-use crate::render_pipeline::cpu_brickmap::{COUNTER_BITS, BRICK_OFFSET};
 use bevy::{
     prelude::*,
     render::{
@@ -24,7 +24,7 @@ impl Default for StreamingSettings {
     fn default() -> Self {
         Self {
             pause_streaming: false,
-            streaming_ratio: 1.0,
+            streaming_ratio: 0.6,
         }
     }
 }
@@ -40,7 +40,7 @@ impl Plugin for VoxelStreamingPlugin {
         .insert_resource(StreamingSettings::default());
 
         app.sub_app_mut(RenderApp)
-            .add_systems(Render, voxel_streaming_system.in_set(RenderSet::Prepare));
+            .add_systems(Render, voxel_streaming_system.in_set(RenderSet::Queue));
     }
 }
 
@@ -55,36 +55,18 @@ fn voxel_streaming_system(
     mut gpu_voxel_world: ResMut<GpuVoxelWorld>,
     streaming_settings: Res<StreamingSettings>,
     character: Query<&ExtractedView, With<VoxelStreamingCamera>>,
-    mut done: Local<bool>,
+    voxel_stats: Res<VoxelWorldStatsResource>,
 ) {
     if streaming_settings.pause_streaming {
         return;
     }
 
-    if !*done {
-        for index in 0..8 {
-            if let Err(e) =
-                gpu_voxel_world.divide_node(index, &voxel_data, &cpu_voxel_world, &render_queue)
-            {
-                warn!("failed to cull node: {}", e);
-            }
-        }
+    // collect the nodes that need to be updated
+    let mut nodes_to_divide = Vec::new();
+    let mut nodes_to_cull = Vec::new();
 
-        for i in 0..64 {
-            let val = gpu_voxel_world.brickmap[i];
-            if val >= BRICK_OFFSET {
-                println!("{}: ({})", i, gpu_voxel_world.brickmap[i] - BRICK_OFFSET);
-            } else {
-                println!("{}: {}", i, gpu_voxel_world.brickmap[i]);
-            }
-            if i % 8 == 7 {
-                println!();
-            }
-        }
-
-        *done = true;
-    }
-
+    let my_span = info_span!("streaming search").entered();
+    // --- ray guided streaming ---
     // get brick hit counters
     // let counter_slice = voxel_data.counters.slice(..);
     // counter_slice.map_async(wgpu::MapMode::Read, |_| {});
@@ -93,35 +75,6 @@ fn voxel_streaming_system(
     // let data = counter_slice.get_mapped_range();
     // let (head, result, tail) = unsafe { data.align_to::<u32>() };
     // assert!(head.is_empty() && tail.is_empty());
-
-    // let extracted_view = character.single();
-    // let streaming_pos =
-    //     extracted_view.transform.translation() + (1 << cpu_voxel_world.brickmap_depth - 1) as f32;
-
-    // collect the nodes that need to be updated
-    // let mut nodes_to_divide = Vec::new();
-    // let mut nodes_to_cull = Vec::new();
-    // gpu_voxel_world.recursive_search(&mut |index, pos, depth| {
-    //     let node_size = (1 << cpu_voxel_world.brickmap_depth - depth) as f32;
-    //     let distance =
-    //         (pos.as_vec3() + node_size / 2.0 - streaming_pos).length() * BRICK_SIZE as f32;
-    //     let ratio = 100.0 * node_size / distance;
-
-    //     let children_index = gpu_voxel_world.brickmap[index];
-    //     if children_index >= BRICK_OFFSET {
-    //         if ratio > streaming_settings.streaming_ratio {
-    //             let cpu_node_index = gpu_voxel_world.gpu_to_cpu[index] as usize;
-    //             let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
-    //             if cpu_node.children != 0 {
-    //                 nodes_to_divide.push((index, pos, depth));
-    //             }
-    //         }
-    //         return;
-    //     }
-    //     if ratio < streaming_settings.streaming_ratio {
-    //         nodes_to_cull.push((index, pos, depth));
-    //     }
-    // });
 
     // // this looks slow but it's actually pretty fast
     // for (index, node_counter) in result.iter().enumerate() {
@@ -142,31 +95,64 @@ fn voxel_streaming_system(
     // drop(data);
     // voxel_data.counters.unmap();
 
-    // let my_span = info_span!("division").entered();
-    // for (index, _, _) in nodes_to_divide {
-    //     if let Err(e) =
-    //         gpu_voxel_world.divide_node(index, &voxel_data, &cpu_voxel_world, &render_queue)
-    //     {
-    //         warn!("failed to divide node: {}", e);
-    //     }
-    // }
-    // drop(my_span);
+    // --- distance guided streaming ---
+    let extracted_view = character.single();
+    let streaming_pos =
+        extracted_view.transform.translation() + (1 << cpu_voxel_world.brickmap_depth - 1) as f32;
 
-    // let my_span = info_span!("culling").entered();
-    // for (index, _, _) in nodes_to_cull {
-    //     if let Err(e) =
-    //         gpu_voxel_world.cull_node(index, &voxel_data, &cpu_voxel_world, &render_queue)
-    //     {
-    //         warn!("failed to cull node: {}", e);
-    //     }
-    // }
-    // drop(my_span);
+    gpu_voxel_world.recursive_search(&mut |index, pos, depth| {
+        let node_size = (1 << cpu_voxel_world.brickmap_depth - depth) as f32;
+        let distance =
+            (pos.as_vec3() + node_size / 2.0 - streaming_pos).length() * BRICK_SIZE as f32;
+        let ratio = 100.0 * node_size / distance;
+
+        let children_index = gpu_voxel_world.brickmap[index];
+        if ratio > streaming_settings.streaming_ratio {
+            if children_index >= BRICK_OFFSET {
+                let cpu_node_index = gpu_voxel_world.gpu_to_cpu[index] as usize;
+                let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
+                if cpu_node.children != 0 {
+                    nodes_to_divide.push((index, pos, depth));
+                }
+            }
+        } else {
+            if children_index < BRICK_OFFSET {
+                nodes_to_cull.push((index, pos, depth));
+            }
+        }
+    });
+    drop(my_span);
+
+    let my_span = info_span!("streaming division").entered();
+    for (index, _, _) in nodes_to_divide {
+        if let Err(e) =
+            gpu_voxel_world.divide_node(index, &voxel_data, &cpu_voxel_world, &render_queue)
+        {
+            warn!("failed to divide node: {}", e);
+        }
+    }
+    drop(my_span);
+
+    let my_span = info_span!("streaming culling").entered();
+    for (index, _, _) in nodes_to_cull {
+        if let Err(e) =
+            gpu_voxel_world.cull_node(index, &voxel_data, &cpu_voxel_world, &render_queue)
+        {
+            warn!("failed to cull node: {}", e);
+        }
+    }
+    drop(my_span);
 
     // println!(
     //     "{} brick holes, {} node holes",
     //     gpu_voxel_world.brickmap_holes.len(),
     //     gpu_voxel_world.brickmap_holes.len()
     // );
+
+    let mut voxel_stats = voxel_stats.lock().unwrap();
+    let dim = gpu_voxel_world.color_texture_size / BRICK_SIZE;
+    voxel_stats.nodes = gpu_voxel_world.brickmap.len() - gpu_voxel_world.brickmap_holes.len() * 8;
+    voxel_stats.bricks = (dim.x * dim.y * dim.z) as usize - gpu_voxel_world.brick_holes.len();
 
     let (_, data, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
     render_queue.write_buffer(&voxel_data.brickmap, 0, data);

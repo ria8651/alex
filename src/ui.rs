@@ -1,4 +1,7 @@
-use crate::{character::CharacterEntity, render_pipeline::StreamingSettings};
+use crate::{
+    character::CharacterEntity,
+    render_pipeline::{StreamingSettings, VoxelWorldStatsResource},
+};
 use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
@@ -39,13 +42,11 @@ fn ui_system(
     mut fps_data: ResMut<FpsData>,
     streaming_settings: ResMut<StreamingSettings>,
     type_registry: ResMut<AppTypeRegistry>,
+    voxel_stats: Res<VoxelWorldStatsResource>,
 ) {
     let mut character_entity = character.single_mut();
 
     egui::Window::new("Settings").show(contexts.ctx_for_window_mut(window.single()), |ui| {
-        // add a text field to change the speed of the character
-        ui.add(DragValue::new(&mut character_entity.speed));
-
         if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
             if let Some(measurement) = fps.measurement() {
                 fps_data.push_back(measurement.value);
@@ -71,8 +72,17 @@ fn ui_system(
             }
         }
 
+        let voxel_stats = voxel_stats.lock().unwrap();
+        ui.label(format!("Nodes: {}", voxel_stats.nodes));
+        ui.label(format!("Bricks: {}", voxel_stats.bricks));
+
         ui.push_id(5, |ui| {
             ui_for_value(streaming_settings.into_inner(), ui, &type_registry.read());
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Speed: ");
+            ui.add(DragValue::new(&mut character_entity.speed));
         });
     });
 }

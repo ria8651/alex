@@ -4,7 +4,7 @@ use bevy::{
     render::{camera::RenderTarget, render_resource::*},
     window::{PrimaryWindow, WindowResized, WindowScaleFactorChanged},
 };
-use bevy_atmosphere::prelude::*;
+// use bevy_atmosphere::prelude::*;
 use character::CharacterEntity;
 use render_pipeline::{VoxelStreamingCamera, VoxelVolume, VoxelVolumeBundle};
 
@@ -22,7 +22,7 @@ fn main() {
                 }),
                 ..default()
             }),
-            AtmospherePlugin,
+            // AtmospherePlugin,
             render_pipeline::VoxelPlugin,
             character::CharacterPlugin,
             ui::UiPlugin,
