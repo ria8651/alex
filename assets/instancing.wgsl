@@ -140,6 +140,45 @@ fn trace_brick(index: u32, local_pos: ptr<function, vec3<f32>>, dir: vec3<f32>, 
     // return vec3(f32(steps) / 10.0);
 }
 
+// https://www.shadertoy.com/view/ldl3DS
+fn check_voxel(brick: u32, pos: vec3<i32>) -> f32 {
+    let brick_size = i32(1u << voxel_uniforms.brick_size);
+    if any(pos < vec3(0)) || any(pos >= vec3(brick_size)) {
+        return 0.0;
+    }
+    
+    let index = u32(pos.z * brick_size * brick_size + pos.y * brick_size + pos.x);
+    let bit = (bricks[brick * voxel_uniforms.brick_ints + index / 32u] >> (index % 32u)) & 1u;
+    return f32(bit);
+}
+fn vertex_ao(side: vec2<f32>, corner: f32) -> f32 {
+    return (side.x + side.y + max(corner, side.x * side.y)) / 3.1;
+}
+fn voxel_ao(pos: vec3<i32>, normal: vec3<i32>, brick: u32) -> vec4<f32> {
+    let d1 = normal.zxy;
+    let d2 = normal.yzx;
+    let side = vec4(check_voxel(brick, pos + d1), check_voxel(brick, pos + d2), check_voxel(brick, pos - d1), check_voxel(brick, pos - d2));
+    let corner = vec4(
+        check_voxel(brick, pos + d1 + d2),
+        check_voxel(brick, pos - d1 + d2),
+        check_voxel(brick, pos - d1 - d2),
+        check_voxel(brick, pos + d1 - d2)
+    );
+
+    var ao: vec4<f32>;
+    ao.x = vertex_ao(side.xy, corner.x);
+    ao.y = vertex_ao(side.yz, corner.y);
+    ao.z = vertex_ao(side.zw, corner.z);
+    ao.w = vertex_ao(side.wx, corner.w);
+
+    return 1.0 - ao;
+}
+fn glmod(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
+    return x - y * floor(x / y);
+}
+
+const light_dir = vec3<f32>(0.8, -1.0, 0.8);
+
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
 }
@@ -148,10 +187,12 @@ struct FragmentOutput {
 fn fragment(in: VertexOutput, @builtin(front_facing) facing: bool) -> FragmentOutput {
     var output_color = vec3(0.0);
 
+    // get ray direction
     let viewport_uv = coords_to_viewport_uv(in.clip_pos.xy, view.viewport);
     let clip_uv = (viewport_uv * 2.0 - 1.0) * vec2(1.0, -1.0);
     let dir = normalize(direction_clip_to_world(vec4(clip_uv, 0.0, 1.0)));
 
+    // get local position
     var pos: vec3<f32>;
     let local_cam = (view.world_position - in.pos_scale.xyz) / in.pos_scale.w;
     if all(local_cam < vec3(1.0)) && all(local_cam > vec3(0.0)) {
@@ -160,11 +201,29 @@ fn fragment(in: VertexOutput, @builtin(front_facing) facing: bool) -> FragmentOu
         pos = in.local_pos;
     }
 
+    // shoot ray
     var normal = in.normal;
-    output_color = trace_brick(in.brick, &pos, dir, &normal);
+    let color = trace_brick(in.brick, &pos, dir, &normal);
 
-    // output_color = vec3(f32(in.brick) / 16.0);
+    // diffuse
+    let diffuse = max(dot(normal, -normalize(light_dir)), 0.0);
 
+    // indirect lighting
+    let bick_size = f32(1u << voxel_uniforms.brick_size);
+    let ao_pos = vec3<i32>(pos * bick_size + normal * 0.5);
+    let ao = voxel_ao(ao_pos, vec3<i32>(normal), in.brick);
+    let uv = glmod(
+        vec2(
+            dot(normal * pos.yzx, vec3(1.0)),
+            dot(normal * pos.zxy, vec3(1.0))
+        ),
+        vec2(1.0 / bick_size)
+    ) * bick_size;
+    let interpolated_ao = mix(mix(ao.z, ao.w, uv.x), mix(ao.y, ao.x, uv.x), uv.y);
+    let indirect = pow(interpolated_ao, 1.0 / 3.0) * 0.3;
+
+    output_color = color * (diffuse + indirect);
+    
     var out: FragmentOutput;
     out.color = vec4<f32>(output_color, 1.0);
     return out;
