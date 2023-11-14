@@ -130,6 +130,7 @@ dependencies = [
  "bytemuck",
  "fastanvil",
  "fastnbt",
+ "radsort",
  "serde_json",
  "wgpu",
 ]

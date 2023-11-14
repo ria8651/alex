@@ -85,23 +85,25 @@ pub struct InstanceBuffer {
 
 fn prepare_instance_buffers(
     mut commands: Commands,
-    query: Query<Entity, With<VoxelVolume>>,
+    query: Query<(Entity, &VoxelVolume)>,
     render_device: Res<RenderDevice>,
     gpu_voxel_world: Res<GpuVoxelWorld>,
 ) {
     let mut brick_istance_data = Vec::new();
 
+    // collect nodes
     gpu_voxel_world.recursive_search(&mut |index, pos, depth| {
-        // skip non leaf nodes
-        if gpu_voxel_world.brickmap[index] < BRICK_OFFSET {
+        // skip non leaf nodes and empty leaf nodes
+        if gpu_voxel_world.brickmap[index] <= BRICK_OFFSET {
             return;
         }
 
         let position = pos.as_vec3() - (1 << gpu_voxel_world.brickmap_depth - 1) as f32;
         let scale = (1 << gpu_voxel_world.brickmap_depth - depth) as f32;
-        let brick = gpu_voxel_world.brickmap[index]
-            .checked_sub(BRICK_OFFSET)
-            .expect("non leaf node in recursive search");
+        if depth > gpu_voxel_world.brickmap_depth {
+            error!("depth {} > {}. This is probably really bad", depth, gpu_voxel_world.brickmap_depth);
+        }
+        let brick = gpu_voxel_world.brickmap[index] - BRICK_OFFSET;
         brick_istance_data.push(BrickInstance {
             position,
             scale,
@@ -109,18 +111,29 @@ fn prepare_instance_buffers(
         });
     });
 
+    // sort nodes
+    let (entity, voxel_volume) = query.single();
+    if voxel_volume.sort {
+        radsort::sort_by_cached_key(&mut brick_istance_data, |brick_instance| {
+            let pos = brick_instance.position + brick_instance.scale / 2.0;
+            let mut distance = voxel_volume.streaming_pos.distance(pos);
+            if voxel_volume.sort_reverse {
+                distance = -distance;
+            }
+            distance
+        });
+    }
+
     let length = brick_istance_data.len();
     let brick_instance_data = bytemuck::cast_slice(brick_istance_data.as_slice());
-    for entity in query.iter() {
-        let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("instance data buffer"),
-            contents: brick_instance_data,
-            usage: BufferUsages::VERTEX,
-        });
-        commands
-            .entity(entity)
-            .insert(InstanceBuffer { buffer, length });
-    }
+    let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("instance data buffer"),
+        contents: brick_instance_data,
+        usage: BufferUsages::VERTEX,
+    });
+    commands
+        .entity(entity)
+        .insert(InstanceBuffer { buffer, length });
 }
 
 fn queue_custom(
@@ -131,7 +144,7 @@ fn queue_custom(
     pipeline_cache: Res<PipelineCache>,
     meshes: Res<RenderAssets<Mesh>>,
     render_mesh_instances: Res<RenderMeshInstances>,
-    material_meshes: Query<Entity, With<VoxelVolume>>,
+    voxel_volumes: Query<Entity, With<VoxelVolume>>,
     mut views: Query<(&ExtractedView, &mut RenderPhase<Opaque3d>)>,
 ) {
     let draw_custom = opaque_3d_draw_functions.read().id::<DrawVoxel>();
@@ -141,7 +154,7 @@ fn queue_custom(
     for (view, mut transparent_phase) in &mut views {
         let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
         let rangefinder = view.rangefinder3d();
-        for entity in &material_meshes {
+        for entity in &voxel_volumes {
             let Some(mesh_instance) = render_mesh_instances.get(&entity) else {
                 continue;
             };

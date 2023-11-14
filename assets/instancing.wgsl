@@ -181,6 +181,7 @@ const light_dir = vec3<f32>(0.8, -1.0, 0.8);
 
 struct FragmentOutput {
     @location(0) color: vec4<f32>,
+    // @builtin(frag_depth) depth: f32,
 }
 
 @fragment
@@ -198,6 +199,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) facing: bool) -> FragmentOu
     if all(local_cam < vec3(1.0)) && all(local_cam > vec3(0.0)) {
         pos = local_cam;
     } else {
+        if !facing {
+            discard;
+        }
         pos = in.local_pos;
     }
 
@@ -223,8 +227,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) facing: bool) -> FragmentOu
     let indirect = pow(interpolated_ao, 1.0 / 3.0) * 0.3;
 
     output_color = color * (diffuse + indirect);
+    // output_color = in.local_pos;
     
     var out: FragmentOutput;
     out.color = vec4<f32>(output_color, 1.0);
+    // out.depth = 0.0;
     return out;
 }

@@ -1,12 +1,16 @@
 use bevy::{
     core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     prelude::*,
-    render::{camera::RenderTarget, render_resource::*},
+    render::{
+        camera::RenderTarget,
+        render_resource::*,
+        texture::{ImageSampler, ImageSamplerDescriptor},
+    },
     window::{PrimaryWindow, WindowResized, WindowScaleFactorChanged},
 };
 // use bevy_atmosphere::prelude::*;
 use character::CharacterEntity;
-use render_pipeline::{VoxelStreamingCamera, VoxelVolume, VoxelVolumeBundle};
+use render_pipeline::{VoxelVolume, VoxelVolumeBundle};
 
 mod character;
 mod render_pipeline;
@@ -29,7 +33,7 @@ fn main() {
         ))
         .insert_resource(Msaa::Off)
         .add_systems(Startup, setup)
-        .add_systems(Update, update_render_texture)
+        .add_systems(Update, (update_streaming_pos, update_render_texture))
         .run();
 }
 
@@ -54,15 +58,11 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     );
     render_texture.texture_descriptor.usage =
         TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT;
+    render_texture.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor::nearest());
     let render_texture = images.add(render_texture);
 
     // add voxel volume
-    commands.spawn(VoxelVolumeBundle {
-        voxel_volume: VoxelVolume {
-            path: "assets/worlds/imperial_city".into(),
-        },
-        ..default()
-    });
+    commands.spawn(VoxelVolumeBundle::default());
 
     // add camera with character controller
     let character_transform =
@@ -85,7 +85,6 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             // tonemapping: Tonemapping::None,
             ..default()
         },
-        VoxelStreamingCamera,
         CharacterEntity {
             look_at: -character_transform.local_z(),
             ..default()
@@ -116,6 +115,16 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     });
 }
 
+fn update_streaming_pos(
+    mut voxel_volumes: Query<&mut VoxelVolume>,
+    character: Query<&Transform, With<CharacterEntity>>,
+) {
+    let character = character.single();
+    let mut voxel_volume = voxel_volumes.single_mut();
+
+    voxel_volume.streaming_pos = character.translation;
+}
+
 fn update_render_texture(
     mut resize_reader: EventReader<WindowResized>,
     mut scale_factor_reader: EventReader<WindowScaleFactorChanged>,
@@ -132,6 +141,8 @@ fn update_render_texture(
             height: height as u32,
             depth_or_array_layers: 1,
         };
+
+        info!("Resizing render texture to {:?}", new_size);
 
         let image = images.get_mut(&render_image.render_texture).unwrap();
         image.resize(new_size);

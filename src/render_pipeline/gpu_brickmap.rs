@@ -58,7 +58,6 @@ impl GpuVoxelWorld {
     ) -> Result<usize> {
         let brick_index = self.brick_holes.pop_front();
         if brick_index.is_none() {
-            warn!("ran out of space in brickmap");
             return Err(anyhow::anyhow!("ran out of space in brickmap"));
         }
 

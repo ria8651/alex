@@ -1,6 +1,6 @@
 use crate::{
     character::CharacterEntity,
-    render_pipeline::{StreamingSettings, VoxelWorldStatsResource},
+    render_pipeline::{StreamingSettings, VoxelVolume, VoxelWorldStatsResource},
 };
 use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
@@ -39,6 +39,7 @@ fn ui_system(
     window: Query<Entity, With<PrimaryWindow>>,
     diagnostics: Res<DiagnosticsStore>,
     mut character: Query<&mut CharacterEntity>,
+    mut voxel_volume: Query<&mut VoxelVolume>,
     mut fps_data: ResMut<FpsData>,
     streaming_settings: ResMut<StreamingSettings>,
     type_registry: ResMut<AppTypeRegistry>,
@@ -75,6 +76,9 @@ fn ui_system(
         let voxel_stats = voxel_stats.lock().unwrap();
         ui.label(format!("Nodes: {}", voxel_stats.nodes));
         ui.label(format!("Bricks: {}", voxel_stats.bricks));
+
+        let voxel_volume = voxel_volume.single_mut();
+        ui_for_value(voxel_volume.into_inner(), ui, &type_registry.read());
 
         ui.push_id(5, |ui| {
             ui_for_value(streaming_settings.into_inner(), ui, &type_registry.read());

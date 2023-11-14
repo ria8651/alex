@@ -1,7 +1,4 @@
-pub use self::{
-    voxel_streaming::{StreamingSettings, VoxelStreamingCamera},
-    voxel_world::VoxelWorldStatsResource,
-};
+pub use self::{voxel_streaming::StreamingSettings, voxel_world::VoxelWorldStatsResource};
 
 use self::{
     voxel_render::VoxelRenderPlugin, voxel_streaming::VoxelStreamingPlugin,
@@ -14,7 +11,6 @@ use bevy::{
         view::NoFrustumCulling,
     },
 };
-use std::path::PathBuf;
 
 mod cpu_brickmap;
 mod gpu_brickmap;
@@ -27,9 +23,23 @@ pub const BRICK_SIZE: u32 = 16;
 pub const BRICK_OFFSET: u32 = 1 << 31;
 pub const COUNTER_BITS: usize = 32;
 
-#[derive(Component, ExtractComponent, Clone, Default)]
+/// A voxel volume that can be rendered. `streaming_pos` has to be kept updated
+/// to the camera position for streaming to work.
+#[derive(Component, ExtractComponent, Clone, Reflect)]
 pub struct VoxelVolume {
-    pub path: PathBuf,
+    pub streaming_pos: Vec3,
+    pub sort: bool,
+    pub sort_reverse: bool,
+}
+
+impl Default for VoxelVolume {
+    fn default() -> Self {
+        Self {
+            streaming_pos: Default::default(),
+            sort: true,
+            sort_reverse: false,
+        }
+    }
 }
 
 #[derive(Bundle, Default)]

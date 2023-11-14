@@ -1,15 +1,13 @@
 use super::{
     gpu_brickmap::GpuVoxelWorld,
     voxel_world::{CpuVoxelWorld, VoxelData},
-    VoxelWorldStatsResource, BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS,
+    VoxelVolume, VoxelWorldStatsResource, BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS,
 };
 use bevy::{
     prelude::*,
     render::{
-        extract_component::{ExtractComponent, ExtractComponentPlugin},
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         renderer::RenderQueue,
-        view::ExtractedView,
         Render, RenderApp, RenderSet,
     },
 };
@@ -33,19 +31,13 @@ pub struct VoxelStreamingPlugin;
 
 impl Plugin for VoxelStreamingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            ExtractResourcePlugin::<StreamingSettings>::default(),
-            ExtractComponentPlugin::<VoxelStreamingCamera>::default(),
-        ))
-        .insert_resource(StreamingSettings::default());
+        app.add_plugins(ExtractResourcePlugin::<StreamingSettings>::default())
+            .insert_resource(StreamingSettings::default());
 
         app.sub_app_mut(RenderApp)
             .add_systems(Render, voxel_streaming_system.in_set(RenderSet::Queue));
     }
 }
-
-#[derive(Component, Clone, ExtractComponent)]
-pub struct VoxelStreamingCamera;
 
 fn voxel_streaming_system(
     voxel_data: Res<VoxelData>,
@@ -54,8 +46,8 @@ fn voxel_streaming_system(
     cpu_voxel_world: Res<CpuVoxelWorld>,
     mut gpu_voxel_world: ResMut<GpuVoxelWorld>,
     streaming_settings: Res<StreamingSettings>,
-    character: Query<&ExtractedView, With<VoxelStreamingCamera>>,
     voxel_stats: Res<VoxelWorldStatsResource>,
+    voxel_volume: Query<&VoxelVolume>,
 ) {
     if streaming_settings.pause_streaming {
         return;
@@ -96,9 +88,8 @@ fn voxel_streaming_system(
     // voxel_data.counters.unmap();
 
     // --- distance guided streaming ---
-    let extracted_view = character.single();
-    let streaming_pos =
-        extracted_view.transform.translation() + (1 << cpu_voxel_world.brickmap_depth - 1) as f32;
+    let mut streaming_pos = voxel_volume.single().streaming_pos;
+    streaming_pos += (1 << cpu_voxel_world.brickmap_depth - 1) as f32;
 
     gpu_voxel_world.recursive_search(&mut |index, pos, depth| {
         let node_size = (1 << cpu_voxel_world.brickmap_depth - depth) as f32;
@@ -142,12 +133,6 @@ fn voxel_streaming_system(
         }
     }
     drop(my_span);
-
-    // println!(
-    //     "{} brick holes, {} node holes",
-    //     gpu_voxel_world.brickmap_holes.len(),
-    //     gpu_voxel_world.brickmap_holes.len()
-    // );
 
     let mut voxel_stats = voxel_stats.lock().unwrap();
     let dim = gpu_voxel_world.color_texture_size / BRICK_SIZE;
