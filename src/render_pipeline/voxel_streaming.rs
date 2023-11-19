@@ -1,7 +1,7 @@
 use super::{
     gpu_brickmap::GpuVoxelWorld,
     voxel_world::{CpuVoxelWorld, VoxelData},
-    VoxelVolume, VoxelWorldStatsResource, BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS,
+    VoxelVolume, VoxelWorldStatsResource, BRICK_OFFSET, BRICK_SIZE,
 };
 use bevy::{
     prelude::*,
@@ -119,6 +119,7 @@ fn voxel_streaming_system(
             gpu_voxel_world.divide_node(index, &voxel_data, &cpu_voxel_world, &render_queue)
         {
             warn!("failed to divide node: {}", e);
+            break;
         }
     }
     drop(my_span);
@@ -129,6 +130,7 @@ fn voxel_streaming_system(
             gpu_voxel_world.cull_node(index, &voxel_data, &cpu_voxel_world, &render_queue)
         {
             warn!("failed to cull node: {}", e);
+            break;
         }
     }
     drop(my_span);
@@ -141,6 +143,6 @@ fn voxel_streaming_system(
     let (_, data, _) = unsafe { gpu_voxel_world.brickmap.align_to::<u8>() };
     render_queue.write_buffer(&voxel_data.brickmap, 0, data);
 
-    let counters = vec![0; gpu_voxel_world.brickmap.len() * COUNTER_BITS / 8];
-    render_queue.write_buffer(&voxel_data.counters, 0, &counters);
+    // let counters = vec![0; gpu_voxel_world.brickmap.len() * COUNTER_BITS / 8];
+    // render_queue.write_buffer(&voxel_data.counters, 0, &counters);
 }

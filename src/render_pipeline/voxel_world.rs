@@ -82,7 +82,7 @@ impl Plugin for VoxelWorldPlugin {
         let counters = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: &counters,
             label: None,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            usage: BufferUsages::STORAGE, // | BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         });
 
         // bricks
