@@ -111,6 +111,9 @@ impl GpuVoxelWorld {
         if node < BRICK_OFFSET {
             return Err(anyhow::anyhow!("node {} already divided", index));
         }
+        if node == BRICK_OFFSET {
+            return Err(anyhow::anyhow!("tried to divide an empty node. this isn't a hard error, but something went wrong with either the mipmapping, streaming or initialization. should be looked into"));
+        }
 
         let cpu_node_index = self.gpu_to_cpu[index] as usize;
         let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
@@ -120,29 +123,28 @@ impl GpuVoxelWorld {
             ));
         }
 
-        let hole = self.brickmap_holes.pop_front();
-        if hole.is_none() {
-            return Err(anyhow::anyhow!("ran out of space in brickmap"));
-        }
+        let hole = match self.brickmap_holes.pop_front() {
+            Some(hole) => hole,
+            None => return Err(anyhow::anyhow!("ran out of space in brickmap")),
+        };
 
         for i in 0..8 {
-            self.brickmap[hole.unwrap() * 8 + i] = BRICK_OFFSET;
+            self.brickmap[hole * 8 + i] = BRICK_OFFSET;
 
             let cpu_child_node_index = cpu_node.children as usize * 8 + i;
             let cpu_child_node = cpu_voxel_world.brickmap[cpu_child_node_index];
-            let cpu_child_brick_index = cpu_child_node.brick;
-            if cpu_child_brick_index != 0 {
+            if cpu_child_node.brick != 0 {
                 let brick_index = self.allocate_brick(
-                    &cpu_voxel_world.bricks[cpu_child_brick_index as usize],
+                    &cpu_voxel_world.bricks[cpu_child_node.brick as usize],
                     voxel_data,
                     render_queue,
                 )?;
-                self.brickmap[hole.unwrap() * 8 + i] = BRICK_OFFSET + brick_index as u32;
-                self.gpu_to_cpu[hole.unwrap() * 8 + i] = cpu_child_node_index as u32;
+                self.brickmap[hole * 8 + i] = BRICK_OFFSET + brick_index as u32;
             }
+            self.gpu_to_cpu[hole * 8 + i] = cpu_child_node_index as u32;
         }
 
-        self.brickmap[index] = hole.unwrap() as u32;
+        self.brickmap[index] = hole as u32;
 
         Ok(())
     }

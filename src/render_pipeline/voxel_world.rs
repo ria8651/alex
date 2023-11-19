@@ -48,18 +48,12 @@ impl Plugin for VoxelWorldPlugin {
         cpu_brickmap.recreate_mipmaps();
 
         // setup gpu brickmap
-        let mut brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
         let brickmap_depth = world_depth - BRICK_SIZE.trailing_zeros();
-        let mut gpu_to_cpu = vec![0; 8 * brickmap_max_nodes];
-        for i in 0..8 {
-            brickmap[i] = BRICK_OFFSET;
-            gpu_to_cpu[i] = i as u32;
-        }
         let dim = color_texture_size / BRICK_SIZE;
         let brick_count = (dim.x * dim.y * dim.z) as usize;
-        let gpu_voxel_world = GpuVoxelWorld {
-            brickmap,
-            gpu_to_cpu,
+        let mut gpu_voxel_world = GpuVoxelWorld {
+            brickmap: vec![BRICK_OFFSET; 8 * brickmap_max_nodes],
+            gpu_to_cpu: vec![0; 8 * brickmap_max_nodes],
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
             brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
             color_texture_size,
@@ -178,17 +172,36 @@ impl Plugin for VoxelWorldPlugin {
                 ],
             });
 
+        let voxel_data = VoxelData {
+            uniform_buffer,
+            brickmap,
+            counters,
+            bricks,
+            color,
+            bind_group_layout,
+            bind_group: None,
+        };
+
+        // initialize brickmap with lowest mip level
+        for i in 0..8 {
+            let brick_index = cpu_brickmap.brickmap[i].brick;
+            if brick_index > 0 {
+                let brick = &cpu_brickmap.bricks[brick_index as usize];
+                match gpu_voxel_world.allocate_brick(brick, &voxel_data, render_queue) {
+                    Ok(gpu_brick_index) => {
+                        gpu_voxel_world.brickmap[i] = BRICK_OFFSET + gpu_brick_index as u32;
+                        gpu_voxel_world.gpu_to_cpu[i] = i as u32;
+                    }
+                    Err(e) => {
+                        error!("failed to allocate brick: {}", e);
+                    }
+                }
+            }
+        }
+
         app.sub_app_mut(RenderApp)
             .insert_resource(voxel_uniforms)
-            .insert_resource(VoxelData {
-                uniform_buffer,
-                brickmap,
-                counters,
-                bricks,
-                color,
-                bind_group_layout,
-                bind_group: None,
-            })
+            .insert_resource(voxel_data)
             .insert_resource(CpuVoxelWorld(cpu_brickmap))
             .insert_resource(gpu_voxel_world)
             .add_systems(

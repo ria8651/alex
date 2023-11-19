@@ -101,7 +101,8 @@ fn prepare_instance_buffers(
         let position = pos.as_vec3() - (1 << gpu_voxel_world.brickmap_depth - 1) as f32;
         let scale = (1 << gpu_voxel_world.brickmap_depth - depth) as f32;
         if depth > gpu_voxel_world.brickmap_depth {
-            error!("depth {} > {}. This is probably really bad", depth, gpu_voxel_world.brickmap_depth);
+            error!("depth {} > {}. this is probably really bad", depth, gpu_voxel_world.brickmap_depth);
+            return;
         }
         let brick = gpu_voxel_world.brickmap[index] - BRICK_OFFSET;
         brick_istance_data.push(BrickInstance {

@@ -42,7 +42,6 @@ impl Plugin for VoxelStreamingPlugin {
 fn voxel_streaming_system(
     voxel_data: Res<VoxelData>,
     render_queue: Res<RenderQueue>,
-    // render_device: Res<RenderDevice>,
     cpu_voxel_world: Res<CpuVoxelWorld>,
     mut gpu_voxel_world: ResMut<GpuVoxelWorld>,
     streaming_settings: Res<StreamingSettings>,
