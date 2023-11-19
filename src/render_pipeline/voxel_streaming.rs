@@ -22,7 +22,7 @@ impl Default for StreamingSettings {
     fn default() -> Self {
         Self {
             pause_streaming: false,
-            streaming_ratio: 0.6,
+            streaming_ratio: 0.4,
         }
     }
 }

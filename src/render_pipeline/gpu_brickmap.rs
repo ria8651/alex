@@ -123,11 +123,13 @@ impl GpuVoxelWorld {
             ));
         }
 
+        // allocate space for child nodes
         let hole = match self.brickmap_holes.pop_front() {
             Some(hole) => hole,
             None => return Err(anyhow::anyhow!("ran out of space in brickmap")),
         };
 
+        // allocate bricks for child nodes
         for i in 0..8 {
             self.brickmap[hole * 8 + i] = BRICK_OFFSET;
 
@@ -144,7 +146,9 @@ impl GpuVoxelWorld {
             self.gpu_to_cpu[hole * 8 + i] = cpu_child_node_index as u32;
         }
 
+        // update node and free old brick
         self.brickmap[index] = hole as u32;
+        self.brick_holes.push_back((node - BRICK_OFFSET) as usize); // shouldn't be empty brick
 
         Ok(())
     }
@@ -161,6 +165,7 @@ impl GpuVoxelWorld {
             return Err(anyhow::anyhow!("node {} already culled", index));
         }
 
+        // free non empty child bricks
         let children_index = 8 * node as usize;
         for i in 0..8 {
             let child_node = self.brickmap[children_index + i];
@@ -170,15 +175,16 @@ impl GpuVoxelWorld {
             }
         }
 
+        // allocate a new brick
         let cpu_node_index = self.gpu_to_cpu[index] as usize;
         let cpu_node = cpu_voxel_world.brickmap[cpu_node_index];
-
         let brick_index = self.allocate_brick(
             &cpu_voxel_world.bricks[cpu_node.brick as usize],
             voxel_data,
             render_queue,
         )?;
 
+        // update node and free child nodes
         self.brickmap[index] = BRICK_OFFSET + brick_index as u32;
         self.brickmap_holes.push_back(children_index / 8);
 
