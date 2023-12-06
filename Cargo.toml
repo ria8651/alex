@@ -11,13 +11,18 @@ bevy = { version = "0.12", default-features = false, features = [
     "bevy_winit",
     "bevy_core_pipeline",
     "bevy_render",
+    "bevy_pbr",
     "tonemapping_luts",
     "bevy_sprite",
     "multi-threaded",
 ] }
+bevy_atmosphere = { git = "https://github.com/elodin-sys/bevy_atmosphere", rev = "e469e29" }
 bevy_egui = "0.23"
 fastanvil = "0.30"
 fastnbt = "2.4"
 serde_json = "1.0"
 bevy-inspector-egui = "0.21"
 wgpu = { version = "0.17", default-features = false }
+bytemuck = "1.7"
+anyhow = "1.0"
+radsort = "0.1"

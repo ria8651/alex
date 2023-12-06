@@ -1,11 +1,16 @@
 use bevy::{
-    core_pipeline::{bloom::BloomSettings, tonemapping::Tonemapping},
+    core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     prelude::*,
-    render::{camera::{RenderTarget, CameraRenderGraph}, render_resource::*},
+    render::{
+        camera::RenderTarget,
+        render_resource::*,
+        texture::{ImageSampler, ImageSamplerDescriptor},
+    },
     window::{PrimaryWindow, WindowResized, WindowScaleFactorChanged},
 };
+// use bevy_atmosphere::prelude::*;
 use character::CharacterEntity;
-use render_pipeline::MainPassSettings;
+use render_pipeline::{VoxelVolume, VoxelVolumeBundle};
 
 mod character;
 mod render_pipeline;
@@ -21,12 +26,14 @@ fn main() {
                 }),
                 ..default()
             }),
-            render_pipeline::RenderPlugin,
+            // AtmospherePlugin,
+            render_pipeline::VoxelPlugin,
             character::CharacterPlugin,
             ui::UiPlugin,
         ))
+        .insert_resource(Msaa::Off)
         .add_systems(Startup, setup)
-        .add_systems(Update, update_render_texture)
+        .add_systems(Update, (update_streaming_pos, update_render_texture))
         .run();
 }
 
@@ -51,15 +58,18 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     );
     render_texture.texture_descriptor.usage =
         TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT;
+    render_texture.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor::nearest());
     let render_texture = images.add(render_texture);
 
-    // add voxel camera with character controller
+    // add voxel volume
+    commands.spawn(VoxelVolumeBundle::default());
+
+    // add camera with character controller
     let character_transform =
         Transform::from_xyz(21.035963, 19.771912, -31.12883).looking_at(Vec3::ZERO, Vec3::Y);
     commands.spawn((
         Camera3dBundle {
             transform: character_transform,
-            camera_render_graph: CameraRenderGraph::new("voxel"),
             camera: Camera {
                 hdr: true,
                 target: RenderTarget::Image(render_texture.clone()),
@@ -72,13 +82,16 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 far: 100.0,
                 ..default()
             }),
+            // tonemapping: Tonemapping::None,
             ..default()
         },
-        MainPassSettings::default(),
         CharacterEntity {
             look_at: -character_transform.local_z(),
             ..default()
         },
+        BloomSettings::default(),
+        Fxaa::default(),
+        // AtmosphereCamera::default(),
     ));
 
     // add sprite and camera to render the render texture
@@ -88,22 +101,28 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             ..default()
         })
         .id();
-    commands.spawn((
-        Camera2dBundle {
-            camera: Camera {
-                hdr: true,
-                ..default()
-            },
-            tonemapping: Tonemapping::ReinhardLuminance,
+    commands.spawn((Camera2dBundle {
+        camera: Camera {
+            hdr: true,
             ..default()
         },
-        BloomSettings::default(),
-        // Fxaa::default(),
-    ));
+        tonemapping: Tonemapping::None,
+        ..default()
+    },));
     commands.insert_resource(CameraData {
         render_texture,
         sprite,
     });
+}
+
+fn update_streaming_pos(
+    mut voxel_volumes: Query<&mut VoxelVolume>,
+    character: Query<&Transform, With<CharacterEntity>>,
+) {
+    let character = character.single();
+    let mut voxel_volume = voxel_volumes.single_mut();
+
+    voxel_volume.streaming_pos = character.translation;
 }
 
 fn update_render_texture(
@@ -122,6 +141,8 @@ fn update_render_texture(
             height: height as u32,
             depth_or_array_layers: 1,
         };
+
+        info!("Resizing render texture to {:?}", new_size);
 
         let image = images.get_mut(&render_image.render_texture).unwrap();
         image.resize(new_size);

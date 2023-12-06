@@ -2,7 +2,7 @@ use super::{
     BeamTexture, FallbackBeamTexture, MainPassPipelineData, MainPassSettings,
     ViewMainPassUniformBuffer,
 };
-use crate::render_pipeline::{voxel_world::VoxelData, RenderGraphSettings};
+use crate::render_pipeline::voxel_world::VoxelData;
 use bevy::{
     ecs::query::QueryItem,
     prelude::*,
@@ -36,13 +36,8 @@ impl ViewNode for MainPassNode {
         let pipeline_cache = world.resource::<PipelineCache>();
         let voxel_data = world.resource::<VoxelData>();
         let pipeline_data = world.resource::<MainPassPipelineData>();
-        let render_graph_settings = world.resource::<RenderGraphSettings>();
         let gpu_images = world.resource::<RenderAssets<Image>>();
         let fallback_beam_texture = world.resource::<FallbackBeamTexture>();
-
-        if !render_graph_settings.trace {
-            return Ok(());
-        }
 
         let beam_texture_filled = *beam_texture.filled.lock().unwrap();
         if !main_pass_settings.beam_optimization && !beam_texture_filled {

@@ -1,9 +1,8 @@
 use crate::{
     character::CharacterEntity,
-    render_pipeline::{MainPassSettings, StreamingSettings},
+    render_pipeline::{StreamingSettings, VoxelVolume, VoxelWorldStatsResource},
 };
 use bevy::{
-    core_pipeline::{bloom::BloomSettings, fxaa::Fxaa, tonemapping::Tonemapping},
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
     window::PrimaryWindow,
@@ -12,18 +11,23 @@ use bevy_egui::{
     egui::{self, DragValue},
     EguiContexts, EguiPlugin,
 };
-use bevy_inspector_egui::{reflect_inspector::ui_for_value, DefaultInspectorConfigPlugin};
+use bevy_inspector_egui::{
+    quick::WorldInspectorPlugin, reflect_inspector::ui_for_value, DefaultInspectorConfigPlugin,
+};
 use std::collections::VecDeque;
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(EguiPlugin)
-            .add_plugins(DefaultInspectorConfigPlugin)
-            .add_plugins(FrameTimeDiagnosticsPlugin)
-            .insert_resource(FpsData(VecDeque::new()))
-            .add_systems(Update, ui_system);
+        app.add_plugins((
+            EguiPlugin,
+            DefaultInspectorConfigPlugin,
+            FrameTimeDiagnosticsPlugin,
+            WorldInspectorPlugin::new(),
+        ))
+        .insert_resource(FpsData(VecDeque::new()))
+        .add_systems(Update, ui_system);
     }
 }
 
@@ -32,28 +36,18 @@ struct FpsData(VecDeque<f64>);
 
 fn ui_system(
     mut contexts: EguiContexts,
-    mut camera_settings_query: Query<(&mut MainPassSettings, Option<&mut Projection>)>,
-    mut post_camera_settings_query: Query<
-        (
-            Option<&mut BloomSettings>,
-            Option<&mut Tonemapping>,
-            Option<&mut Fxaa>,
-        ),
-        With<Camera2d>,
-    >,
     window: Query<Entity, With<PrimaryWindow>>,
     diagnostics: Res<DiagnosticsStore>,
-    mut character: Query<(&mut Transform, &mut CharacterEntity)>,
+    mut character: Query<&mut CharacterEntity>,
+    mut voxel_volume: Query<&mut VoxelVolume>,
     mut fps_data: ResMut<FpsData>,
     streaming_settings: ResMut<StreamingSettings>,
     type_registry: ResMut<AppTypeRegistry>,
+    voxel_stats: Res<VoxelWorldStatsResource>,
 ) {
-    let (mut character, mut character_entity) = character.single_mut();
+    let mut character_entity = character.single_mut();
 
     egui::Window::new("Settings").show(contexts.ctx_for_window_mut(window.single()), |ui| {
-        // add a text field to change the speed of the character
-        ui.add(DragValue::new(&mut character_entity.speed));
-
         if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
             if let Some(measurement) = fps.measurement() {
                 fps_data.push_back(measurement.value);
@@ -79,53 +73,20 @@ fn ui_system(
             }
         }
 
-        let (mut trace_settings, projection) = camera_settings_query.single_mut();
-        let (bloom_settings, tonemapping, fxaa) = post_camera_settings_query.single_mut();
-        egui::CollapsingHeader::new(format!("Camera Settings"))
-            .default_open(true)
-            .show(ui, |ui| {
-                ui_for_value(trace_settings.as_mut(), ui, &type_registry.read());
-                if let Some(tonemapping) = tonemapping {
-                    ui.push_id(1, |ui| {
-                        ui_for_value(tonemapping.into_inner(), ui, &type_registry.read());
-                    });
-                }
-                if let Some(bloom_settings) = bloom_settings {
-                    ui.push_id(2, |ui| {
-                        ui_for_value(bloom_settings.into_inner(), ui, &type_registry.read());
-                    });
-                }
-                if let Some(fxaa) = fxaa {
-                    ui.push_id(3, |ui| {
-                        ui_for_value(fxaa.into_inner(), ui, &type_registry.read());
-                    });
-                }
-                if let Some(projection) = projection {
-                    ui.push_id(4, |ui| {
-                        ui_for_value(projection.into_inner(), ui, &type_registry.read());
-                    });
-                }
-            });
+        let voxel_stats = voxel_stats.lock().unwrap();
+        ui.label(format!("Nodes: {}", voxel_stats.nodes));
+        ui.label(format!("Bricks: {}", voxel_stats.bricks));
+
+        let voxel_volume = voxel_volume.single_mut();
+        ui_for_value(voxel_volume.into_inner(), ui, &type_registry.read());
 
         ui.push_id(5, |ui| {
-            ui_for_value(
-                streaming_settings.into_inner(),
-                ui,
-                &type_registry.read(),
-            );
+            ui_for_value(streaming_settings.into_inner(), ui, &type_registry.read());
         });
 
-        if ui.button("print pos rot").clicked() {
-            println!("{:?}, {:?}", character.translation, character.rotation);
-        }
-        if ui.button("go to pos1").clicked() {
-            character.translation = Vec3::new(-12.808739, 5.79611, 10.124223);
-            character.rotation =
-                Quat::from_array([-0.28589484, -0.37392232, -0.12235297, 0.8737712]);
-        }
-        if ui.button("go to pos2").clicked() {
-            character.translation = Vec3::new(-2.7467077, 23.573212, -1.1159008);
-            character.rotation = Quat::from_array([-0.498245, -0.5017268, -0.49896964, 0.5010505]);
-        }
+        ui.horizontal(|ui| {
+            ui.label("Speed: ");
+            ui.add(DragValue::new(&mut character_entity.speed));
+        });
     });
 }

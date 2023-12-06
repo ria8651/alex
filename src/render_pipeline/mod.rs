@@ -1,69 +1,67 @@
+pub use self::{voxel_streaming::StreamingSettings, voxel_world::VoxelWorldStatsResource};
+
 use self::{
-    main_pass::{MainPassNode, MainPassPlugin},
-    voxel_streaming::VoxelStreamingPlugin,
+    voxel_render::VoxelRenderPlugin, voxel_streaming::VoxelStreamingPlugin,
     voxel_world::VoxelWorldPlugin,
 };
 use bevy::{
     prelude::*,
     render::{
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_graph::{RenderGraphApp, ViewNodeRunner},
-        RenderApp,
+        extract_component::{ExtractComponent, ExtractComponentPlugin},
+        view::NoFrustumCulling,
     },
 };
-pub use {main_pass::MainPassSettings, voxel_streaming::StreamingSettings};
 
 mod cpu_brickmap;
+mod gpu_brickmap;
 mod load_anvil;
-mod main_pass;
+mod voxel_render;
 mod voxel_streaming;
 mod voxel_world;
 
-pub struct RenderPlugin;
+pub const BRICK_SIZE: u32 = 16;
+pub const BRICK_OFFSET: u32 = 1 << 31;
+pub const COUNTER_BITS: usize = 32;
 
-impl Plugin for RenderPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(RenderGraphSettings::default())
-            .add_plugins(ExtractResourcePlugin::<RenderGraphSettings>::default())
-            .add_plugins(VoxelStreamingPlugin)
-            .add_plugins(VoxelWorldPlugin)
-            .add_plugins(MainPassPlugin);
-    }
-
-    fn finish(&self, app: &mut App) {
-        let render_app = app.sub_app_mut(RenderApp);
-
-        render_app
-            .add_render_sub_graph("voxel")
-            .add_render_graph_node::<ViewNodeRunner<MainPassNode>>("voxel", "beam_pass")
-            .add_render_graph_node::<ViewNodeRunner<MainPassNode>>("voxel", "main_pass")
-            .add_render_graph_edges("voxel", &["beam_pass", "main_pass"]);
-    }
+/// A voxel volume that can be rendered. `streaming_pos` has to be kept updated
+/// to the camera position for streaming to work.
+#[derive(Component, ExtractComponent, Clone, Reflect)]
+pub struct VoxelVolume {
+    pub streaming_pos: Vec3,
+    pub sort: bool,
+    pub sort_reverse: bool,
 }
 
-#[derive(Resource, Clone, ExtractResource)]
-pub struct RenderGraphSettings {
-    pub clear: bool,
-    pub automata: bool,
-    pub animation: bool,
-    pub voxelization: bool,
-    pub rebuild: bool,
-    pub physics: bool,
-    pub trace: bool,
-    pub denoise: bool,
-}
-
-impl Default for RenderGraphSettings {
+impl Default for VoxelVolume {
     fn default() -> Self {
         Self {
-            clear: true,
-            automata: true,
-            animation: true,
-            voxelization: true,
-            rebuild: true,
-            physics: true,
-            trace: true,
-            denoise: false,
+            streaming_pos: Default::default(),
+            sort: true,
+            sort_reverse: false,
         }
+    }
+}
+
+#[derive(Bundle, Default)]
+pub struct VoxelVolumeBundle {
+    pub voxel_volume: VoxelVolume,
+    pub visibility: Visibility,
+    pub inherited_visibility: InheritedVisibility,
+    pub view_visibility: ViewVisibility,
+    pub transform: Transform,
+    pub global_transform: GlobalTransform,
+    pub no_frustum_culling: NoFrustumCulling,
+}
+
+pub struct VoxelPlugin;
+
+impl Plugin for VoxelPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins((
+            VoxelWorldPlugin,
+            VoxelRenderPlugin,
+            VoxelStreamingPlugin,
+            ExtractComponentPlugin::<VoxelVolume>::default(),
+        ));
     }
 }

@@ -1,42 +1,44 @@
 use super::{
-    cpu_brickmap::{Brick, CpuBrickmap, BRICK_SIZE, COUNTER_BITS},
+    cpu_brickmap::{Brick, CpuBrickmap},
+    gpu_brickmap::GpuVoxelWorld,
     load_anvil::load_anvil,
-    voxel_streaming::BRICK_OFFSET,
+    BRICK_OFFSET, BRICK_SIZE, COUNTER_BITS,
 };
 use bevy::{
+    ecs::system::{lifetimeless::SRes, SystemParamItem},
     prelude::*,
     render::{
         extract_resource::ExtractResource,
+        render_phase::{PhaseItem, RenderCommand, RenderCommandResult, TrackedRenderPass},
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
         Render, RenderApp, RenderSet,
     },
 };
-use std::{collections::VecDeque, path::PathBuf};
+use std::{
+    collections::VecDeque,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Resource, Deref, DerefMut)]
 pub struct CpuVoxelWorld(CpuBrickmap);
 
-#[derive(Resource)]
-pub struct GpuVoxelWorld {
-    pub brickmap: Vec<u32>,
-    pub gpu_to_cpu: Vec<u32>,
-    pub brickmap_holes: VecDeque<usize>,
-    pub brick_holes: VecDeque<usize>,
-    pub color_texture_size: UVec3,
-}
-
 pub struct VoxelWorldPlugin;
 
 impl Plugin for VoxelWorldPlugin {
-    fn build(&self, _app: &mut App) {}
+    fn build(&self, app: &mut App) {
+        let stats = VoxelWorldStatsResource::default();
+        app.insert_resource(stats.clone());
+        app.sub_app_mut(RenderApp).insert_resource(stats.clone());
+    }
 
     fn finish(&self, app: &mut App) {
         let render_device = app.world.resource::<RenderDevice>();
         let render_queue = app.world.resource::<RenderQueue>();
 
         // brickmap settings
-        let world_depth = 10;
+        let world_depth = 12;
         let color_texture_size = UVec3::splat(640);
         let brickmap_max_nodes = 1 << 16;
 
@@ -46,25 +48,21 @@ impl Plugin for VoxelWorldPlugin {
         cpu_brickmap.recreate_mipmaps();
 
         // setup gpu brickmap
-        let mut brickmap = vec![BRICK_OFFSET; 8 * brickmap_max_nodes];
-        let mut gpu_to_cpu = vec![0; 8 * brickmap_max_nodes];
-        for i in 0..8 {
-            brickmap[i] = BRICK_OFFSET + 1;
-            gpu_to_cpu[i] = i as u32;
-        }
+        let brickmap_depth = world_depth - BRICK_SIZE.trailing_zeros();
         let dim = color_texture_size / BRICK_SIZE;
         let brick_count = (dim.x * dim.y * dim.z) as usize;
-        let gpu_voxel_world = GpuVoxelWorld {
-            brickmap,
-            gpu_to_cpu,
+        let mut gpu_voxel_world = GpuVoxelWorld {
+            brickmap: vec![BRICK_OFFSET; 8 * brickmap_max_nodes],
+            gpu_to_cpu: vec![0; 8 * brickmap_max_nodes],
             brickmap_holes: (1..brickmap_max_nodes).collect::<VecDeque<usize>>(),
             brick_holes: (1..brick_count).collect::<VecDeque<usize>>(),
             color_texture_size,
+            brickmap_depth,
         };
 
         // uniforms
         let voxel_uniforms = VoxelUniforms {
-            brickmap_depth: world_depth - BRICK_SIZE.trailing_zeros(),
+            brickmap_depth,
             brick_size: BRICK_SIZE.trailing_zeros(),
             brick_ints: Brick::brick_ints() as u32,
         };
@@ -84,7 +82,7 @@ impl Plugin for VoxelWorldPlugin {
         let counters = render_device.create_buffer_with_data(&BufferInitDescriptor {
             contents: &counters,
             label: None,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            usage: BufferUsages::STORAGE, // | BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         });
 
         // bricks
@@ -174,50 +172,45 @@ impl Plugin for VoxelWorldPlugin {
                 ],
             });
 
-        let bind_group = render_device.create_bind_group(
-            Some("voxel bind group"),
-            &bind_group_layout,
-            &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.binding().unwrap(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: brickmap.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: counters.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: bricks.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 4,
-                    resource: BindingResource::TextureView(
-                        &color.create_view(&TextureViewDescriptor::default()),
-                    ),
-                },
-            ],
-        );
+        let voxel_data = VoxelData {
+            uniform_buffer,
+            brickmap,
+            counters,
+            bricks,
+            color,
+            bind_group_layout,
+            bind_group: None,
+        };
+
+        // initialize brickmap with lowest mip level
+        for i in 0..8 {
+            let brick_index = cpu_brickmap.brickmap[i].brick;
+            if brick_index > 0 {
+                let brick = &cpu_brickmap.bricks[brick_index as usize];
+                match gpu_voxel_world.allocate_brick(brick, &voxel_data, render_queue) {
+                    Ok(gpu_brick_index) => {
+                        gpu_voxel_world.brickmap[i] = BRICK_OFFSET + gpu_brick_index as u32;
+                        gpu_voxel_world.gpu_to_cpu[i] = i as u32;
+                    }
+                    Err(e) => {
+                        error!("failed to allocate brick: {}", e);
+                    }
+                }
+            }
+        }
 
         app.sub_app_mut(RenderApp)
             .insert_resource(voxel_uniforms)
-            .insert_resource(VoxelData {
-                uniform_buffer,
-                brickmap,
-                counters,
-                bricks,
-                color,
-                bind_group_layout,
-                bind_group,
-            })
+            .insert_resource(voxel_data)
             .insert_resource(CpuVoxelWorld(cpu_brickmap))
             .insert_resource(gpu_voxel_world)
-            .add_systems(Render, prepare_uniforms.in_set(RenderSet::Prepare))
-            .add_systems(Render, queue_bind_group.in_set(RenderSet::Queue));
+            .add_systems(
+                Render,
+                (
+                    prepare_uniforms.in_set(RenderSet::Prepare),
+                    prepare_bind_group.in_set(RenderSet::PrepareBindGroups),
+                ),
+            );
     }
 }
 
@@ -229,7 +222,7 @@ pub struct VoxelData {
     pub bricks: Buffer,
     pub color: Texture,
     pub bind_group_layout: BindGroupLayout,
-    pub bind_group: BindGroup,
+    pub bind_group: Option<BindGroup>,
 }
 
 #[derive(Resource, ExtractResource, Clone, ShaderType)]
@@ -251,7 +244,7 @@ fn prepare_uniforms(
         .write_buffer(&render_device, &render_queue);
 }
 
-fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<VoxelData>) {
+fn prepare_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<VoxelData>) {
     let bind_group = render_device.create_bind_group(
         Some("voxel bind group"),
         &voxel_data.bind_group_layout,
@@ -282,5 +275,51 @@ fn queue_bind_group(render_device: Res<RenderDevice>, mut voxel_data: ResMut<Vox
             },
         ],
     );
-    voxel_data.bind_group = bind_group;
+    voxel_data.bind_group = Some(bind_group);
+}
+
+pub struct SetVoxelDataBindGroup<const I: usize>;
+
+impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetVoxelDataBindGroup<I> {
+    type Param = SRes<VoxelData>;
+    type ViewWorldQuery = ();
+    type ItemWorldQuery = ();
+
+    fn render<'w>(
+        _item: &P,
+        _view: (),
+        _entity: (),
+        query: SystemParamItem<'w, '_, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) -> RenderCommandResult {
+        let voxel_world_data = query.into_inner();
+        let bind_group = voxel_world_data.bind_group.as_ref();
+        match bind_group {
+            Some(bind_group) => {
+                pass.set_bind_group(I, bind_group, &[]);
+                RenderCommandResult::Success
+            }
+            None => {
+                error!("voxel bind group not created");
+                RenderCommandResult::Failure
+            }
+        }
+    }
+}
+
+#[derive(Resource, Clone, Deref, DerefMut)]
+pub struct VoxelWorldStatsResource(Arc<Mutex<VoxelWorldStats>>);
+
+impl Default for VoxelWorldStatsResource {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(VoxelWorldStats {
+            nodes: 0,
+            bricks: 0,
+        })))
+    }
+}
+
+pub struct VoxelWorldStats {
+    pub nodes: usize,
+    pub bricks: usize,
 }

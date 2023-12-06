@@ -1,4 +1,7 @@
-use super::cpu_brickmap::{Brick, CpuBrickmap, BRICK_SIZE};
+use super::{
+    cpu_brickmap::{Brick, CpuBrickmap},
+    BRICK_SIZE,
+};
 use bevy::{prelude::*, utils::HashMap};
 use std::path::PathBuf;
 
@@ -39,7 +42,13 @@ pub fn load_anvil(region_path: PathBuf, world_depth: u32) -> CpuBrickmap {
             let path = region_path.join(format!("r.{}.{}.mca", region_x, region_z));
             if let Ok(file) = std::fs::File::open(path.clone()) {
                 info!("loading region {}", path.display());
-                let mut region = Region::from_stream(file).unwrap();
+                let mut region = match Region::from_stream(file) {
+                    Ok(region) => region,
+                    Err(e) => {
+                        error!("failed to load region {}: {}", path.display(), e);
+                        continue;
+                    }
+                };
 
                 for chunk_x in 0..side_length_chunks.min(32) {
                     for chunk_z in 0..side_length_chunks.min(32) {

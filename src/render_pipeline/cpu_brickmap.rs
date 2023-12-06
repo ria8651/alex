@@ -1,7 +1,5 @@
+use super::BRICK_SIZE;
 use bevy::prelude::*;
-
-pub const BRICK_SIZE: u32 = 16;
-pub const COUNTER_BITS: usize = 32;
 
 pub struct Brick {
     data: [[u8; 4]; (BRICK_SIZE * BRICK_SIZE * BRICK_SIZE) as usize],
