@@ -53,7 +53,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        &[0, 230, 0, 255],
+        &[0u8; 8],
         TextureFormat::Rgba16Float,
     );
     render_texture.texture_descriptor.usage =
