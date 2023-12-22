@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "A massive scale voxel engine"
 repository = "https://github.com/ria8651/alex"
+default-run = "alex"
 
 [dependencies]
 bevy = { version = "0.12", default-features = false, features = [
@@ -15,8 +16,8 @@ bevy = { version = "0.12", default-features = false, features = [
     "tonemapping_luts",
     "bevy_sprite",
     "multi-threaded",
+    "png",
 ] }
-bevy_atmosphere = { git = "https://github.com/elodin-sys/bevy_atmosphere", rev = "e469e29" }
 bevy_egui = "0.23"
 fastanvil = "0.30"
 fastnbt = "2.4"
@@ -26,3 +27,4 @@ wgpu = { version = "0.17", default-features = false }
 bytemuck = "1.7"
 anyhow = "1.0"
 radsort = "0.1"
+minecraft-assets = "0.0.6"

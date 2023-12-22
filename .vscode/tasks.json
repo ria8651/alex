@@ -3,7 +3,7 @@
     "tasks": [
         {
             "label": "Run alex",
-            "command": "cargo run --release --features bevy/file_watcher",
+            "command": "cargo run --release --bin voxelize",
             "type": "shell",
             "args": [],
             "problemMatcher": [
