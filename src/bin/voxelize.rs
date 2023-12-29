@@ -67,10 +67,34 @@ fn setup(
             .with_translation(Vec3::new(0.0, -2.0, 0.0)),
         ..default()
     });
+    let mut mesh = BlockModel::new();
+    for face in [
+        BlockFace::Down,
+        BlockFace::Up,
+        BlockFace::North,
+        BlockFace::South,
+        BlockFace::East,
+        BlockFace::West,
+    ] {
+        mesh.push_face(
+            Vec3::ZERO,
+            Vec3::ONE,
+            face,
+            Vec2::ZERO,
+            Vec2::ONE,
+            Quat::IDENTITY,
+            Vec3::ZERO,
+        );
+    }
+    let mesh = meshes.add(mesh.to_mesh());
     // cube
     commands.spawn(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-        material: materials.add(Color::rgb_u8(124, 144, 255).into()),
+        mesh,
+        material: materials.add(StandardMaterial {
+            base_color_texture: Some(asset_server.load("test.png")),
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
         transform: Transform::from_xyz(0.0, -1.5, 0.0),
         ..default()
     });
@@ -130,6 +154,11 @@ fn setup(
 
         models.push(new_model);
     }
+
+    commands.insert_resource(AmbientLight {
+        brightness: 0.3,
+        ..default()
+    });
 
     let mut texture_handles = HashMap::new();
     for model in models.iter() {
@@ -216,9 +245,11 @@ fn spawn_blocks(
 
             for (block_face, face) in element.faces.iter() {
                 let Some(handle) = texture_handles.0.get(&face.texture.0) else {
+                    info!("missing texture");
                     continue;
                 };
                 let Some(index) = texture_atlas.get_texture_index(handle) else {
+                    info!("missing texture");
                     continue;
                 };
 
@@ -236,7 +267,7 @@ fn spawn_blocks(
 
                 match face.rotation {
                     0 => {}
-                    90 | 270 => {
+                    90 => {
                         swap(&mut uv_bottom_left.x, &mut uv_top_right.y);
                         swap(&mut uv_bottom_left.y, &mut uv_top_right.x);
                     }
@@ -244,17 +275,10 @@ fn spawn_blocks(
                         swap(&mut uv_bottom_left.y, &mut uv_top_right.y);
                         swap(&mut uv_bottom_left.x, &mut uv_top_right.x);
                     }
-                    // 270 => {
-                    //     swap(&mut uv_bottom_left.x, &mut uv_top_right.x);
-                    // }
-                    // 90 => {
-                    //     swap(&mut uv_bottom_left.x, &mut uv_top_right.y);
-                    //     swap(&mut uv_bottom_left.y, &mut uv_top_right.x);
-                    // }
-                    // 180 => {
-                    //     swap(&mut uv_bottom_left.y, &mut uv_top_right.y);
-                    //     swap(&mut uv_bottom_left.x, &mut uv_top_right.x);
-                    // }
+                    270 => {
+                        swap(&mut uv_bottom_left.x, &mut uv_top_right.y);
+                        swap(&mut uv_bottom_left.y, &mut uv_top_right.x);
+                    }
                     _ => unreachable!("invalid rotation"),
                 }
 
@@ -338,10 +362,10 @@ impl BlockModel {
                     Vec3::new(0.0, 0.0, 1.0),
                 ]);
                 self.uvs.extend_from_slice(&[
-                    Vec2::new(uv1.x, uv1.y),
-                    Vec2::new(uv2.x, uv1.y),
-                    Vec2::new(uv2.x, uv2.y),
                     Vec2::new(uv1.x, uv2.y),
+                    Vec2::new(uv2.x, uv2.y),
+                    Vec2::new(uv2.x, uv1.y),
+                    Vec2::new(uv1.x, uv1.y),
                 ]);
             }
             BlockFace::South => {
@@ -378,9 +402,9 @@ impl BlockModel {
                     Vec3::new(1.0, 0.0, 0.0),
                 ]);
                 self.uvs.extend_from_slice(&[
-                    Vec2::new(uv1.x, uv1.y),
-                    Vec2::new(uv2.x, uv1.y),
                     Vec2::new(uv2.x, uv2.y),
+                    Vec2::new(uv2.x, uv1.y),
+                    Vec2::new(uv1.x, uv1.y),
                     Vec2::new(uv1.x, uv2.y),
                 ]);
             }
@@ -398,10 +422,10 @@ impl BlockModel {
                     Vec3::new(-1.0, 0.0, 0.0),
                 ]);
                 self.uvs.extend_from_slice(&[
+                    Vec2::new(uv2.x, uv2.y),
                     Vec2::new(uv2.x, uv1.y),
                     Vec2::new(uv1.x, uv1.y),
                     Vec2::new(uv1.x, uv2.y),
-                    Vec2::new(uv2.x, uv2.y),
                 ]);
             }
             BlockFace::Up => {
@@ -418,10 +442,10 @@ impl BlockModel {
                     Vec3::new(0.0, 1.0, 0.0),
                 ]);
                 self.uvs.extend_from_slice(&[
-                    Vec2::new(uv2.x, uv1.y),
-                    Vec2::new(uv1.x, uv1.y),
-                    Vec2::new(uv1.x, uv2.y),
                     Vec2::new(uv2.x, uv2.y),
+                    Vec2::new(uv1.x, uv2.y),
+                    Vec2::new(uv1.x, uv1.y),
+                    Vec2::new(uv2.x, uv1.y),
                 ]);
             }
             BlockFace::Down => {
@@ -438,10 +462,10 @@ impl BlockModel {
                     Vec3::new(0.0, -1.0, 0.0),
                 ]);
                 self.uvs.extend_from_slice(&[
-                    Vec2::new(uv1.x, uv1.y),
-                    Vec2::new(uv2.x, uv1.y),
-                    Vec2::new(uv2.x, uv2.y),
                     Vec2::new(uv1.x, uv2.y),
+                    Vec2::new(uv2.x, uv2.y),
+                    Vec2::new(uv2.x, uv1.y),
+                    Vec2::new(uv1.x, uv1.y),
                 ]);
             }
         }
