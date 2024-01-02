@@ -2,7 +2,11 @@ use bevy::{
     core_pipeline::bloom::BloomSettings,
     pbr::ScreenSpaceAmbientOcclusionBundle,
     prelude::*,
-    render::mesh::{Indices, PrimitiveTopology},
+    render::{
+        mesh::{Indices, PrimitiveTopology},
+        render_resource::*,
+        renderer::RenderDevice,
+    },
     utils::HashMap,
 };
 use character::CharacterEntity;
@@ -14,9 +18,12 @@ use minecraft_assets::{
     },
 };
 use std::{mem::swap, path::Path};
+use voxelization::VoxelizationMaterial;
+use wgpu::BufferDescriptor;
 
-#[path = "../character.rs"]
+#[path = "../../character.rs"]
 mod character;
+mod voxelization;
 
 fn main() {
     App::new()
@@ -31,6 +38,7 @@ fn main() {
                 })
                 .set(ImagePlugin::default_nearest()),
             character::CharacterPlugin,
+            voxelization::VoxelizationPlugin,
         ))
         .add_state::<AppState>()
         .insert_resource(Msaa::Off)
@@ -207,10 +215,12 @@ fn check_textures(
 fn spawn_blocks(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<VoxelizationMaterial>>,
+    // mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     texture_handles: Res<TextureHandles>,
     models: Res<Models>,
+    render_device: Res<RenderDevice>,
 ) {
     let mut texture_atlas_builder = TextureAtlasBuilder::default();
     let mut image_sizes = Vec::new();
@@ -221,15 +231,25 @@ fn spawn_blocks(
     }
 
     let texture_atlas = texture_atlas_builder.finish(&mut images).unwrap();
-    let block_material = materials.add(StandardMaterial {
-        base_color_texture: Some(texture_atlas.texture.clone()),
-        alpha_mode: AlphaMode::Mask(0.5),
-        perceptual_roughness: 1.0,
-        ..default()
+    let block_material = materials.add(VoxelizationMaterial {
+        color_texture: Some(texture_atlas.texture.clone()),
+        // would rather use Vec<u32> here but bevy doesn't add MAP_READ to the buffer usages
+        output_voxels: render_device.create_buffer(&BufferDescriptor {
+            label: Some("voxels"),
+            size: 16 * 16 * 16 * 4,
+            usage: BufferUsages::STORAGE | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        }),
     });
+    // let block_material = materials.add(StandardMaterial {
+    //     base_color_texture: Some(texture_atlas.texture.clone()),
+    //     alpha_mode: AlphaMode::Mask(0.5),
+    //     perceptual_roughness: 1.0,
+    //     ..default()
+    // });
 
     let side_length = (models.0.len() as f32).sqrt().ceil() as usize;
-    for (i, model) in models.0.iter().enumerate() {
+    for (i, model) in models.0.iter().rev().enumerate() {
         let mut block_model = BlockModel::new();
         for element in model.elements.as_ref().expect("no elements") {
             let axis = match element.rotation.axis {
@@ -300,12 +320,14 @@ fn spawn_blocks(
         }
 
         let pos = Vec3::new((i % side_length) as f32, 0.0, (i / side_length) as f32);
-        commands.spawn(PbrBundle {
+        commands.spawn(MaterialMeshBundle {
             mesh: meshes.add(block_model.to_mesh()),
             material: block_material.clone(),
             transform: Transform::from_translation(pos).with_scale(Vec3::splat(1.0 / 16.0)),
             ..default()
         });
+
+        break;
     }
 }
 

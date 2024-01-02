@@ -1,11 +1,21 @@
 {
     "version": "2.0.0",
+    "options": {
+        "env": {
+            "MTL_HUD_ENABLED": "1"
+        }
+    },
     "tasks": [
         {
             "label": "Run alex",
-            "command": "cargo run --release --bin voxelize",
+            "command": "cargo",
             "type": "shell",
-            "args": [],
+            "args": [
+                "run",
+                "--release",
+                "--bin",
+                "voxelize",
+            ],
             "problemMatcher": [
                 "$rustc"
             ],
