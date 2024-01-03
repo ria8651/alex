@@ -1,5 +1,6 @@
 /target
 /assets/worlds/*
+/assets/block_models/*
 !/assets/worlds/imperial_city
 /traces
 trace-*
