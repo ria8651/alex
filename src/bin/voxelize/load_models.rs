@@ -1,11 +1,7 @@
 use crate::{receive_voxels, voxelization::VoxelizationMaterial, AppState, BlockModel};
 use bevy::{
     prelude::*,
-    render::{
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_resource::*,
-        renderer::RenderDevice,
-    },
+    render::{render_resource::*, renderer::RenderDevice},
     utils::HashMap,
 };
 use minecraft_assets::{
@@ -21,8 +17,8 @@ pub struct LoadModelsPlugin;
 
 impl Plugin for LoadModelsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(ExtractResourcePlugin::<LoadedBlock>::default())
-            .init_resource::<LoadedBlock>()
+        app.init_resource::<LoadedBlock>()
+            .init_resource::<BlockMaterialLabels>()
             .add_systems(OnEnter(AppState::Loading), setup)
             .add_systems(Update, check_textures.run_if(in_state(AppState::Loading)))
             .add_systems(OnEnter(AppState::Finished), make_atlas)
@@ -137,19 +133,20 @@ fn make_atlas(
 }
 
 #[derive(Component)]
-struct Block(String);
+struct Block;
 
-#[derive(Resource, Clone, Default, ExtractResource)]
-pub struct LoadedBlock {
-    pub index: usize,
-    pub identifier: String,
-}
+#[derive(Resource, Clone, Default)]
+struct LoadedBlock(usize);
+
+#[derive(Resource, Deref, DerefMut, Default)]
+pub struct BlockMaterialLabels(HashMap<AssetId<VoxelizationMaterial>, String>);
 
 fn next_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<VoxelizationMaterial>>,
     mut loaded_block: ResMut<LoadedBlock>,
+    mut block_material_labels: ResMut<BlockMaterialLabels>,
     blocks: Query<Entity, With<Block>>,
     texture_handles: Res<TextureHandles>,
     atlas: Res<Atlas>,
@@ -157,104 +154,107 @@ fn next_block(
     models: Res<Models>,
     render_device: Res<RenderDevice>,
 ) {
-    if loaded_block.index >= models.len() {
-        return;
-    }
-
     // remove old blocks
     for block in blocks.iter() {
         commands.entity(block).despawn();
     }
 
-    let block_material = materials.add(VoxelizationMaterial {
-        color_texture: Some(atlas.texture.clone()),
-        // would rather use Vec<u32> here but bevy doesn't add MAP_READ to the buffer usages
-        output_buffer: render_device.create_buffer(&BufferDescriptor {
-            label: Some("voxels"),
-            size: 16 * 16 * 16 * 4,
-            usage: BufferUsages::STORAGE | BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        }),
-    });
-
-    let (name, model) = &models[loaded_block.index];
-    let mut block_model = BlockModel::new();
-    for element in model.elements.as_ref().expect("no elements") {
-        let axis = match element.rotation.axis {
-            models::Axis::X => Vec3::new(1.0, 0.0, 0.0),
-            models::Axis::Y => Vec3::new(0.0, 1.0, 0.0),
-            models::Axis::Z => Vec3::new(0.0, 0.0, 1.0),
-        };
-        let rotation = Quat::from_axis_angle(axis, element.rotation.angle);
-        let rotate_around = Vec3::from(element.rotation.origin);
-
-        let bottom_left = Vec3::from(element.from);
-        let top_right = Vec3::from(element.to);
-
-        for (block_face, face) in element.faces.iter() {
-            let Some(handle) = texture_handles.0.get(&face.texture.0) else {
-                info!("missing texture {}", face.texture.0);
-                continue;
-            };
-            let Some(index) = atlas.get_texture_index(handle) else {
-                info!("texture not in atlas {}", face.texture.0);
-                continue;
-            };
-
-            let uv_size = image_sizes[index];
-            let uv_rect = atlas.textures[index];
-
-            let (mut uv_bottom_left, mut uv_top_right) = match face.uv {
-                Some(uv) => (Vec2::new(uv[0], uv[1]), Vec2::new(uv[2], uv[3])),
-                None => match block_face {
-                    BlockFace::Up | BlockFace::Down => (bottom_left.xz(), top_right.xz()),
-                    BlockFace::North | BlockFace::South => (bottom_left.xy(), top_right.xy()),
-                    BlockFace::East | BlockFace::West => (bottom_left.yz(), top_right.yz()),
-                },
-            };
-
-            match face.rotation {
-                0 => {}
-                90 => {
-                    swap(&mut uv_bottom_left.x, &mut uv_top_right.y);
-                    swap(&mut uv_bottom_left.y, &mut uv_top_right.x);
-                }
-                180 => {
-                    swap(&mut uv_bottom_left.y, &mut uv_top_right.y);
-                    swap(&mut uv_bottom_left.x, &mut uv_top_right.x);
-                }
-                270 => {
-                    swap(&mut uv_bottom_left.x, &mut uv_top_right.y);
-                    swap(&mut uv_bottom_left.y, &mut uv_top_right.x);
-                }
-                _ => unreachable!("invalid rotation"),
-            }
-
-            uv_bottom_left = (uv_rect.size() * uv_bottom_left / uv_size + uv_rect.min) / atlas.size;
-            uv_top_right = (uv_rect.size() * uv_top_right / uv_size + uv_rect.min) / atlas.size;
-
-            block_model.push_face(
-                bottom_left,
-                top_right,
-                *block_face,
-                uv_bottom_left,
-                uv_top_right,
-                rotation,
-                rotate_around,
-            );
+    for _ in 0..16 {
+        if loaded_block.0 >= models.len() {
+            return;
         }
+
+        let block_material = materials.add(VoxelizationMaterial {
+            color_texture: Some(atlas.texture.clone()),
+            // would rather use Vec<u32> here but bevy doesn't add MAP_READ to the buffer usages
+            output_buffer: render_device.create_buffer(&BufferDescriptor {
+                label: Some("voxels"),
+                size: 16 * 16 * 16 * 4,
+                usage: BufferUsages::STORAGE | BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            }),
+        });
+
+        let (name, model) = &models[loaded_block.0];
+        let mut block_model = BlockModel::new();
+        for element in model.elements.as_ref().expect("no elements") {
+            let axis = match element.rotation.axis {
+                models::Axis::X => Vec3::new(1.0, 0.0, 0.0),
+                models::Axis::Y => Vec3::new(0.0, 1.0, 0.0),
+                models::Axis::Z => Vec3::new(0.0, 0.0, 1.0),
+            };
+            let rotation = Quat::from_axis_angle(axis, element.rotation.angle);
+            let rotate_around = Vec3::from(element.rotation.origin);
+
+            let bottom_left = Vec3::from(element.from);
+            let top_right = Vec3::from(element.to);
+
+            for (block_face, face) in element.faces.iter() {
+                let Some(handle) = texture_handles.0.get(&face.texture.0) else {
+                    info!("missing texture {}", face.texture.0);
+                    continue;
+                };
+                let Some(index) = atlas.get_texture_index(handle) else {
+                    info!("texture not in atlas {}", face.texture.0);
+                    continue;
+                };
+
+                let uv_size = image_sizes[index];
+                let uv_rect = atlas.textures[index];
+
+                let (mut uv_bottom_left, mut uv_top_right) = match face.uv {
+                    Some(uv) => (Vec2::new(uv[0], uv[1]), Vec2::new(uv[2], uv[3])),
+                    None => match block_face {
+                        BlockFace::Up | BlockFace::Down => (bottom_left.xz(), top_right.xz()),
+                        BlockFace::North | BlockFace::South => (bottom_left.xy(), top_right.xy()),
+                        BlockFace::East | BlockFace::West => (bottom_left.yz(), top_right.yz()),
+                    },
+                };
+
+                match face.rotation {
+                    0 => {}
+                    90 => {
+                        swap(&mut uv_bottom_left.x, &mut uv_top_right.y);
+                        swap(&mut uv_bottom_left.y, &mut uv_top_right.x);
+                    }
+                    180 => {
+                        swap(&mut uv_bottom_left.y, &mut uv_top_right.y);
+                        swap(&mut uv_bottom_left.x, &mut uv_top_right.x);
+                    }
+                    270 => {
+                        swap(&mut uv_bottom_left.x, &mut uv_top_right.y);
+                        swap(&mut uv_bottom_left.y, &mut uv_top_right.x);
+                    }
+                    _ => unreachable!("invalid rotation"),
+                }
+
+                uv_bottom_left =
+                    (uv_rect.size() * uv_bottom_left / uv_size + uv_rect.min) / atlas.size;
+                uv_top_right = (uv_rect.size() * uv_top_right / uv_size + uv_rect.min) / atlas.size;
+
+                block_model.push_face(
+                    bottom_left,
+                    top_right,
+                    *block_face,
+                    uv_bottom_left,
+                    uv_top_right,
+                    rotation,
+                    rotate_around,
+                );
+            }
+        }
+
+        commands.spawn((
+            MaterialMeshBundle {
+                mesh: meshes.add(block_model.to_mesh()),
+                material: block_material.clone(),
+                transform: Transform::from_scale(Vec3::splat(1.0 / 16.01)),
+                ..default()
+            },
+            Block,
+        ));
+
+        block_material_labels.insert(block_material.id(), name.clone());
+        loaded_block.0 += 1;
     }
-
-    commands.spawn((
-        MaterialMeshBundle {
-            mesh: meshes.add(block_model.to_mesh()),
-            material: block_material.clone(),
-            transform: Transform::from_scale(Vec3::splat(1.0 / 16.01)),
-            ..default()
-        },
-        Block(name.clone()),
-    ));
-
-    loaded_block.index += 1;
-    loaded_block.identifier = name.clone();
 }

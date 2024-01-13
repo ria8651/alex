@@ -1,4 +1,4 @@
-use crate::{load_models::LoadedBlock, VoxelReturnChannel};
+use crate::VoxelReturnChannel;
 use bevy::{
     pbr::RenderMaterials,
     prelude::*,
@@ -136,9 +136,8 @@ fn read_back_buffer_data(
     render_materials: ResMut<RenderMaterials<VoxelizationMaterial>>,
     render_device: Res<RenderDevice>,
     voxel_return_channel: Res<VoxelReturnChannel>,
-    loaded_block: Res<LoadedBlock>,
 ) {
-    for prepared_material in render_materials.values() {
+    for (asset_id, prepared_material) in render_materials.iter() {
         for (_, binding) in prepared_material.bindings.iter() {
             if let OwnedBindingResource::Buffer(buffer) = binding {
                 let slice = buffer.slice(..);
@@ -167,7 +166,7 @@ fn read_back_buffer_data(
 
                 voxel_return_channel
                     .sender
-                    .send((loaded_block.identifier.clone(), voxels))
+                    .send((asset_id.clone(), voxels))
                     .expect("voxel return channel closed");
 
                 // unmap the buffer so that it can be used again

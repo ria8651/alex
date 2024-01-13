@@ -10,7 +10,9 @@ use block_model::BlockModel;
 use character::CharacterEntity;
 use crossbeam::channel::{Receiver, Sender};
 use dot_vox::{DotVoxData, Model, Size, Voxel};
+use load_models::BlockMaterialLabels;
 use std::fs::File;
+use voxelization::VoxelizationMaterial;
 
 mod block_model;
 #[path = "../../character.rs"]
@@ -52,8 +54,8 @@ enum AppState {
 
 #[derive(Resource, ExtractResource, Clone)]
 pub struct VoxelReturnChannel {
-    sender: Sender<(String, Vec<(UVec3, [u8; 4])>)>,
-    receiver: Receiver<(String, Vec<(UVec3, [u8; 4])>)>,
+    sender: Sender<(AssetId<VoxelizationMaterial>, Vec<(UVec3, [u8; 4])>)>,
+    receiver: Receiver<(AssetId<VoxelizationMaterial>, Vec<(UVec3, [u8; 4])>)>,
 }
 
 fn setup(mut commands: Commands) {
@@ -106,9 +108,14 @@ pub fn receive_voxels(
     // mut meshes: ResMut<Assets<Mesh>>,
     // mut materials: ResMut<Assets<StandardMaterial>>,
     // lil_blocks: Query<Entity, With<LilBlock>>,
+    block_material_labels: Res<BlockMaterialLabels>,
     voxel_return_channel: Res<VoxelReturnChannel>,
 ) {
     for (identifier, blocks) in voxel_return_channel.receiver.try_iter() {
+        let label = block_material_labels
+            .get(&identifier)
+            .expect("no label for voxelized block");
+
         // create the palette
         let mut palette_map = HashMap::new();
         for (_, color) in blocks.iter() {
@@ -118,7 +125,7 @@ pub fn receive_voxels(
         }
 
         if palette_map.len() > 255 {
-            panic!("Too many colors in palette for {}", identifier);
+            panic!("Too many colors in palette for {}", label);
         }
 
         let mut pallete = vec![[0u8; 4]; 256];
@@ -126,7 +133,7 @@ pub fn receive_voxels(
             pallete[*index as usize] = *color;
         }
 
-        let path = format!("assets/block_models/{}.vox", identifier);
+        let path = format!("assets/block_models/{}.vox", label);
         std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()).unwrap();
         DotVoxData {
             version: 150,

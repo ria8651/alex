@@ -12,7 +12,8 @@
 fn fragment(
     mesh: VertexOutput,
 ) -> @location(0) vec4<f32> {
-    let col = textureSample(color_texture, color_sampler, mesh.uv);
+    var col = textureSample(color_texture, color_sampler, mesh.uv);
+    col = pow(col, vec4(1.0 / 2.2));
 
     if col.a < 0.5 {
         discard;
